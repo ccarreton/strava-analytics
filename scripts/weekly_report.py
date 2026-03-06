@@ -1,8 +1,8 @@
 import pandas as pd
 import requests
 
-BOT_TOKEN="PON_AQUI_TU_TOKEN"
-CHAT_ID="PON_AQUI_TU_CHAT_ID"
+BOT_TOKEN="8467992856:AAExZnsZCLS9S5y-KktePsQD2KACXRsJfC0"
+CHAT_ID="195248378"
 
 df=pd.read_json("data/strava_full_history.json")
 
