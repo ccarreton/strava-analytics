@@ -2,14 +2,15 @@ import json
 import requests
 import pandas as pd
 import os
+from json import JSONDecoder
 
 CLIENT_ID = os.environ["STRAVA_CLIENT_ID"]
 CLIENT_SECRET = os.environ["STRAVA_CLIENT_SECRET"]
 REFRESH_TOKEN = os.environ["STRAVA_REFRESH_TOKEN"]
 
-# -----------------------------
+# -----------------------------------
 # obtener access token nuevo
-# -----------------------------
+# -----------------------------------
 
 auth_url = "https://www.strava.com/oauth/token"
 
@@ -25,22 +26,39 @@ tokens = res.json()
 
 access_token = tokens["access_token"]
 
-# -----------------------------
-# leer dataset actual
-# -----------------------------
+# -----------------------------------
+# leer dataset histórico (parser robusto)
+# -----------------------------------
 
 with open("data/strava_full_history.json") as f:
-    data = json.load(f)
+    text = f.read()
 
-df = pd.DataFrame(data)
+decoder = JSONDecoder()
+idx = 0
+items = []
+
+while idx < len(text):
+    slice_text = text[idx:].lstrip()
+    if not slice_text:
+        break
+    try:
+        obj, end = decoder.raw_decode(slice_text)
+        if isinstance(obj, list):
+            items.extend(obj)
+        else:
+            items.append(obj)
+        idx += len(text[idx:]) - len(slice_text) + end
+    except:
+        idx += 1
+
+df = pd.DataFrame(items)
 
 last_date = pd.to_datetime(df["start_date"]).max()
-
 timestamp = int(last_date.timestamp())
 
-# -----------------------------
+# -----------------------------------
 # descargar nuevas actividades
-# -----------------------------
+# -----------------------------------
 
 url = "https://www.strava.com/api/v3/athlete/activities"
 
@@ -54,7 +72,6 @@ params = {
 }
 
 new_activities = []
-
 page = 1
 
 while True:
@@ -74,11 +91,11 @@ while True:
 
 print("New activities:", len(new_activities))
 
-# -----------------------------
+# -----------------------------------
 # actualizar dataset
-# -----------------------------
+# -----------------------------------
 
-data.extend(new_activities)
+items.extend(new_activities)
 
 with open("data/strava_full_history.json", "w") as f:
-    json.dump(data, f)
+    json.dump(items, f)
