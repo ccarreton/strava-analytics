@@ -296,17 +296,17 @@ table["hours"] = table["hours"].round(2)
 st.dataframe(table, use_container_width=True)
 
 # =========================================================
-# PERFORMANCE MODULE (PRs + Power + HR) using raw_json
+# PERFORMANCE MODULE (clean version)
 # =========================================================
 
 import json
-import numpy as np
 
 st.divider()
 st.header("🏆 Performance Records")
 
 @st.cache_data
 def extract_metrics(df_in):
+
     rows = []
 
     for _, r in df_in.iterrows():
@@ -317,6 +317,7 @@ def extract_metrics(df_in):
             continue
 
         try:
+
             j = json.loads(raw)
 
             rows.append({
@@ -334,59 +335,78 @@ def extract_metrics(df_in):
         except:
             continue
 
-    out = pd.DataFrame(rows)
+    dfm = pd.DataFrame(rows)
 
-    if len(out):
-        out["km"] = out["distance"] / 1000
-        out["pace_sec_km"] = out["moving_time"] / out["km"]
+    if len(dfm):
 
-    return out
+        dfm["km"] = dfm["distance"] / 1000
+        dfm["pace"] = dfm["moving_time"] / dfm["km"]
+
+    return dfm
 
 
 metrics = extract_metrics(df)
 
-# ---------------------------------------------------------
-# BEST TIMES (activity-level PRs)
-# ---------------------------------------------------------
+# =========================================================
+# RUNNING PRs
+# =========================================================
 
-st.subheader("Best Times (by activity)")
+st.subheader("🏃 Running PRs")
 
-targets = [1, 5, 10, 21.097]
+run_types = ["Run", "TrailRun"]
+
+runs = metrics[metrics["type"].isin(run_types)]
 
 records = []
 
-for t in targets:
+targets = {
+    "1 km": (0.9,1.2),
+    "5 km": (4.8,5.3),
+    "10 km": (9.5,10.5),
+    "21 km": (20,22)
+}
 
-    subset = metrics[metrics["km"] >= t]
+for label,(low,high) in targets.items():
 
-    if len(subset) == 0:
+    subset = runs[(runs["km"] > low) & (runs["km"] < high)]
+
+    if len(subset)==0:
         continue
 
-    best = subset.loc[(subset["moving_time"] / subset["km"]).idxmin()]
+    best = subset.loc[subset["pace"].idxmin()]
 
-    pace = best["moving_time"] / best["km"]
+    pace = best["pace"]
+
+    pace_str = f"{int(pace//60)}:{int(pace%60):02d} /km"
 
     records.append({
-        "Distance": f"{t} km",
-        "Best pace": f"{int(pace//60)}:{int(pace%60):02d} /km",
-        "Date": best["date"].date(),
-        "Activity": best["name"]
+        "Distance":label,
+        "Best pace":pace_str,
+        "Date":best["date"].date(),
+        "Activity":best["name"]
     })
 
 records_df = pd.DataFrame(records)
 
 if len(records_df):
+
     st.dataframe(records_df, use_container_width=True)
+
 else:
-    st.info("No running records found for selected filters.")
 
-# ---------------------------------------------------------
-# POWER RECORDS
-# ---------------------------------------------------------
+    st.info("No running PRs found.")
 
-st.subheader("⚡ Power Records")
+# =========================================================
+# CYCLING POWER
+# =========================================================
 
-power = metrics.dropna(subset=["avg_watts","max_watts"])
+st.subheader("⚡ Cycling Power Records")
+
+bike_types = ["Ride","VirtualRide"]
+
+power = metrics[metrics["type"].isin(bike_types)]
+
+power = power.dropna(subset=["avg_watts","max_watts"])
 
 if len(power):
 
@@ -411,15 +431,19 @@ if len(power):
     st.dataframe(power_table, use_container_width=True)
 
 else:
-    st.info("No power data available.")
 
-# ---------------------------------------------------------
-# HEART RATE RECORDS
-# ---------------------------------------------------------
+    st.info("No cycling power data available.")
+
+# =========================================================
+# HEART RATE
+# =========================================================
 
 st.subheader("❤️ Heart Rate Records")
 
 hr = metrics.dropna(subset=["avg_hr","max_hr"])
+
+# filtro fisiológico básico
+hr = hr[(hr["max_hr"] < 210) & (hr["max_hr"] > 40)]
 
 if len(hr):
 
@@ -444,4 +468,5 @@ if len(hr):
     st.dataframe(hr_table, use_container_width=True)
 
 else:
+
     st.info("No heart rate data available.")
