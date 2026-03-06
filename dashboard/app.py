@@ -294,3 +294,154 @@ table["km"] = table["km"].round(2)
 table["hours"] = table["hours"].round(2)
 
 st.dataframe(table, use_container_width=True)
+
+# =========================================================
+# PERFORMANCE MODULE (PRs + Power + HR) using raw_json
+# =========================================================
+
+import json
+import numpy as np
+
+st.divider()
+st.header("🏆 Performance Records")
+
+@st.cache_data
+def extract_metrics(df_in):
+    rows = []
+
+    for _, r in df_in.iterrows():
+
+        raw = r.get("raw_json")
+
+        if not raw:
+            continue
+
+        try:
+            j = json.loads(raw)
+
+            rows.append({
+                "date": r["date"],
+                "name": r["name"],
+                "type": r["type"],
+                "distance": j.get("distance"),
+                "moving_time": j.get("moving_time"),
+                "avg_hr": j.get("average_heartrate"),
+                "max_hr": j.get("max_heartrate"),
+                "avg_watts": j.get("average_watts"),
+                "max_watts": j.get("max_watts")
+            })
+
+        except:
+            continue
+
+    out = pd.DataFrame(rows)
+
+    if len(out):
+        out["km"] = out["distance"] / 1000
+        out["pace_sec_km"] = out["moving_time"] / out["km"]
+
+    return out
+
+
+metrics = extract_metrics(df)
+
+# ---------------------------------------------------------
+# BEST TIMES (activity-level PRs)
+# ---------------------------------------------------------
+
+st.subheader("Best Times (by activity)")
+
+targets = [1, 5, 10, 21.097]
+
+records = []
+
+for t in targets:
+
+    subset = metrics[metrics["km"] >= t]
+
+    if len(subset) == 0:
+        continue
+
+    best = subset.loc[(subset["moving_time"] / subset["km"]).idxmin()]
+
+    pace = best["moving_time"] / best["km"]
+
+    records.append({
+        "Distance": f"{t} km",
+        "Best pace": f"{int(pace//60)}:{int(pace%60):02d} /km",
+        "Date": best["date"].date(),
+        "Activity": best["name"]
+    })
+
+records_df = pd.DataFrame(records)
+
+if len(records_df):
+    st.dataframe(records_df, use_container_width=True)
+else:
+    st.info("No running records found for selected filters.")
+
+# ---------------------------------------------------------
+# POWER RECORDS
+# ---------------------------------------------------------
+
+st.subheader("⚡ Power Records")
+
+power = metrics.dropna(subset=["avg_watts","max_watts"])
+
+if len(power):
+
+    best_max = power.loc[power["max_watts"].idxmax()]
+    best_avg = power.loc[power["avg_watts"].idxmax()]
+
+    power_table = pd.DataFrame([
+        {
+            "Metric":"Max Power",
+            "Value":f"{int(best_max['max_watts'])} W",
+            "Date":best_max["date"].date(),
+            "Activity":best_max["name"]
+        },
+        {
+            "Metric":"Best Avg Power",
+            "Value":f"{int(best_avg['avg_watts'])} W",
+            "Date":best_avg["date"].date(),
+            "Activity":best_avg["name"]
+        }
+    ])
+
+    st.dataframe(power_table, use_container_width=True)
+
+else:
+    st.info("No power data available.")
+
+# ---------------------------------------------------------
+# HEART RATE RECORDS
+# ---------------------------------------------------------
+
+st.subheader("❤️ Heart Rate Records")
+
+hr = metrics.dropna(subset=["avg_hr","max_hr"])
+
+if len(hr):
+
+    best_max = hr.loc[hr["max_hr"].idxmax()]
+    best_avg = hr.loc[hr["avg_hr"].idxmax()]
+
+    hr_table = pd.DataFrame([
+        {
+            "Metric":"Max Heart Rate",
+            "Value":f"{int(best_max['max_hr'])} bpm",
+            "Date":best_max["date"].date(),
+            "Activity":best_max["name"]
+        },
+        {
+            "Metric":"Highest Avg Heart Rate",
+            "Value":f"{int(best_avg['avg_hr'])} bpm",
+            "Date":best_avg["date"].date(),
+            "Activity":best_avg["name"]
+        }
+    ])
+
+    st.dataframe(hr_table, use_container_width=True)
+
+else:
+    st.info("No heart rate data available.")
