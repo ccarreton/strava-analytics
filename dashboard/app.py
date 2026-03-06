@@ -294,9 +294,8 @@ table["km"] = table["km"].round(2)
 table["hours"] = table["hours"].round(2)
 
 st.dataframe(table, use_container_width=True)
-
 # =========================================================
-# PERFORMANCE MODULE (clean version)
+# PERFORMANCE MODULE (final clean version)
 # =========================================================
 
 import json
@@ -320,9 +319,15 @@ def extract_metrics(df_in):
 
             j = json.loads(raw)
 
+            place = j.get("location_city")
+
+            # fallback si Strava no devuelve ciudad
+            if not place:
+                place = r.get("name")
+
             rows.append({
                 "date": r["date"],
-                "name": r["name"],
+                "place": place,
                 "type": r["type"],
                 "distance": j.get("distance"),
                 "moving_time": j.get("moving_time"),
@@ -383,7 +388,7 @@ for label,(low,high) in targets.items():
         "Distance":label,
         "Best pace":pace_str,
         "Date":best["date"].date(),
-        "Activity":best["name"]
+        "Location":best["place"]
     })
 
 records_df = pd.DataFrame(records)
@@ -418,13 +423,13 @@ if len(power):
             "Metric":"Max Power",
             "Value":f"{int(best_max['max_watts'])} W",
             "Date":best_max["date"].date(),
-            "Activity":best_max["name"]
+            "Location":best_max["place"]
         },
         {
             "Metric":"Best Avg Power",
             "Value":f"{int(best_avg['avg_watts'])} W",
             "Date":best_avg["date"].date(),
-            "Activity":best_avg["name"]
+            "Location":best_avg["place"]
         }
     ])
 
@@ -455,13 +460,13 @@ if len(hr):
             "Metric":"Max Heart Rate",
             "Value":f"{int(best_max['max_hr'])} bpm",
             "Date":best_max["date"].date(),
-            "Activity":best_max["name"]
+            "Location":best_max["place"]
         },
         {
             "Metric":"Highest Avg Heart Rate",
             "Value":f"{int(best_avg['avg_hr'])} bpm",
             "Date":best_avg["date"].date(),
-            "Activity":best_avg["name"]
+            "Location":best_avg["place"]
         }
     ])
 
