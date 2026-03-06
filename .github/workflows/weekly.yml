@@ -1,4 +1,4 @@
-name: weekly-report
+name: strava-weekly-bot
 
 on:
   workflow_dispatch:
@@ -6,16 +6,41 @@ on:
     - cron: '0 7 * * 1'
 
 jobs:
-  run-script:
+
+  run-bot:
+
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
 
-      - uses: actions/setup-python@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
-      - run: pip install -r requirements.txt
+      - name: Install dependencies
+        run: pip install pandas requests
 
-      - run: python scripts/weekly_report.py
+      - name: Ingest new Strava activities
+        run: python scripts/ingest_strava.py
+        env:
+          STRAVA_CLIENT_ID: ${{ secrets.STRAVA_CLIENT_ID }}
+          STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
+          STRAVA_REFRESH_TOKEN: ${{ secrets.STRAVA_REFRESH_TOKEN }}
+
+      - name: Generate weekly report
+        run: python scripts/weekly_report.py
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      - name: Commit updated dataset
+        run: |
+          git config --global user.name "strava-bot"
+          git config --global user.email "bot@github.com"
+          git add data/strava_full_history.json
+          git commit -m "update activities" || echo "no changes"
+          git push
