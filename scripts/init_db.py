@@ -16,6 +16,12 @@ CREATE TABLE IF NOT EXISTS activities (
 )
 """)
 
+# índice para acelerar filtros y ingestión incremental
+cursor.execute("""
+CREATE INDEX IF NOT EXISTS idx_start_date
+ON activities(start_date)
+""")
+
 conn.commit()
 conn.close()
 
