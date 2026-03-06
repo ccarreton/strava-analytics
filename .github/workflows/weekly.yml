@@ -26,7 +26,9 @@ jobs:
       
       - name: Install dependencies
         run: pip install pandas requests
-             python scripts/init_db.py
+
+      - name: Inicializar base de datos
+        run: python scripts/init_db.py
         
       - name: Ingest new Strava activities
         run: python scripts/ingest_strava.py
