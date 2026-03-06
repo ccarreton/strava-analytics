@@ -2,13 +2,12 @@ import requests
 import sqlite3
 import os
 import json
+import pandas as pd
 from datetime import datetime
 
 CLIENT_ID = os.environ["STRAVA_CLIENT_ID"]
 CLIENT_SECRET = os.environ["STRAVA_CLIENT_SECRET"]
 REFRESH_TOKEN = os.environ["STRAVA_REFRESH_TOKEN"]
-
-# Obtener access token nuevo
 
 auth_url = "https://www.strava.com/oauth/token"
 
@@ -26,23 +25,20 @@ access_token = tokens["access_token"]
 
 print("Access token obtained")
 
-# Conectar base de datos
-
 conn = sqlite3.connect("data/activities.db")
 cursor = conn.cursor()
 
 cursor.execute("SELECT MAX(start_date) FROM activities")
 row = cursor.fetchone()
 
-timestamp = 0
+after_timestamp = 0
 
 if row and row[0]:
-    last_date = row[0]
-    timestamp = int(datetime.fromisoformat(last_date.replace("Z","")).timestamp())
 
-print("Timestamp used:", timestamp)
+    last_date = pd.to_datetime(row[0])
+    after_timestamp = int(last_date.timestamp())
 
-# Llamar API Strava
+print("Fetching activities after:", after_timestamp)
 
 url = "https://www.strava.com/api/v3/athlete/activities"
 
@@ -51,7 +47,7 @@ headers = {
 }
 
 params = {
-    "after": timestamp,
+    "after": after_timestamp,
     "per_page": 200
 }
 
@@ -68,7 +64,7 @@ while True:
     if not activities:
         break
 
-    print("Fetched activities:", len(activities))
+    print("Fetched:", len(activities))
 
     for a in activities:
 
