@@ -1,16 +1,14 @@
-import json
 import requests
-import pandas as pd
+import sqlite3
 import os
-from json import JSONDecoder
+import json
+from datetime import datetime
 
 CLIENT_ID = os.environ["STRAVA_CLIENT_ID"]
 CLIENT_SECRET = os.environ["STRAVA_CLIENT_SECRET"]
 REFRESH_TOKEN = os.environ["STRAVA_REFRESH_TOKEN"]
 
-# -----------------------------------
-# obtener access token nuevo
-# -----------------------------------
+# Obtener access token nuevo
 
 auth_url = "https://www.strava.com/oauth/token"
 
@@ -26,39 +24,25 @@ tokens = res.json()
 
 access_token = tokens["access_token"]
 
-# -----------------------------------
-# leer dataset histórico (parser robusto)
-# -----------------------------------
+print("Access token obtained")
 
-with open("data/strava_full_history.json") as f:
-    text = f.read()
+# Conectar base de datos
 
-decoder = JSONDecoder()
-idx = 0
-items = []
+conn = sqlite3.connect("data/activities.db")
+cursor = conn.cursor()
 
-while idx < len(text):
-    slice_text = text[idx:].lstrip()
-    if not slice_text:
-        break
-    try:
-        obj, end = decoder.raw_decode(slice_text)
-        if isinstance(obj, list):
-            items.extend(obj)
-        else:
-            items.append(obj)
-        idx += len(text[idx:]) - len(slice_text) + end
-    except:
-        idx += 1
+cursor.execute("SELECT MAX(start_date) FROM activities")
+row = cursor.fetchone()
 
-df = pd.DataFrame(items)
+timestamp = 0
 
-last_date = pd.to_datetime(df["start_date"]).max()
-timestamp = int(last_date.timestamp())
+if row and row[0]:
+    last_date = row[0]
+    timestamp = int(datetime.fromisoformat(last_date.replace("Z","")).timestamp())
 
-# -----------------------------------
-# descargar nuevas actividades
-# -----------------------------------
+print("Timestamp used:", timestamp)
+
+# Llamar API Strava
 
 url = "https://www.strava.com/api/v3/athlete/activities"
 
@@ -71,31 +55,43 @@ params = {
     "per_page": 200
 }
 
-new_activities = []
 page = 1
+new_count = 0
 
 while True:
 
     params["page"] = page
 
     r = requests.get(url, headers=headers, params=params)
-
     activities = r.json()
 
-    if len(activities) == 0:
+    if not activities:
         break
 
-    new_activities.extend(activities)
+    print("Fetched activities:", len(activities))
+
+    for a in activities:
+
+        cursor.execute("""
+        INSERT OR IGNORE INTO activities
+        (id,start_date,type,name,distance,moving_time,total_elevation_gain,raw_json)
+        VALUES (?,?,?,?,?,?,?,?)
+        """,(
+            a["id"],
+            a["start_date"],
+            a["type"],
+            a["name"],
+            a["distance"],
+            a["moving_time"],
+            a.get("total_elevation_gain",0),
+            json.dumps(a)
+        ))
+
+        new_count += 1
 
     page += 1
 
-print("New activities:", len(new_activities))
+conn.commit()
+conn.close()
 
-# -----------------------------------
-# actualizar dataset
-# -----------------------------------
-
-items.extend(new_activities)
-
-with open("data/strava_full_history.json", "w") as f:
-    json.dump(items, f)
+print("New activities inserted:", new_count)
