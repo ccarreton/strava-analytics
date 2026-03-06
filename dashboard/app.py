@@ -12,7 +12,7 @@ st.set_page_config(page_title="Strava Training Dashboard", layout="wide")
 st.title("🏃 Strava Training Dashboard")
 
 # -------------------------
-# Load data
+# LOAD DATA
 # -------------------------
 
 @st.cache_data
@@ -25,24 +25,26 @@ def load_data():
 df = load_data()
 
 # -------------------------
-# Feature engineering
+# FEATURE ENGINEERING
 # -------------------------
 
-df["date"] = pd.to_datetime(df["start_date"])
+df["date"] = pd.to_datetime(df["start_date"], utc=True).dt.tz_localize(None)
+
 df["km"] = df["distance"] / 1000
 df["hours"] = df["moving_time"] / 3600
+
 df["year"] = df["date"].dt.year
 
 df["week"] = df["date"] - pd.to_timedelta(df["date"].dt.weekday, unit="d")
 df["week"] = df["week"].dt.normalize()
 
 # -------------------------
-# Sidebar filters
+# SIDEBAR FILTERS
 # -------------------------
 
 st.sidebar.header("Filters")
 
-sports = sorted(df["type"].unique())
+sports = sorted(df["type"].dropna().unique())
 
 selected_sports = st.sidebar.multiselect(
     "Sport",
@@ -50,49 +52,53 @@ selected_sports = st.sidebar.multiselect(
     default=sports
 )
 
-# Quick time filter
 time_mode = st.sidebar.radio(
     "Time range",
-    ["All time","Last 6 weeks","Last 3 months","YTD"]
+    ["All time", "Last 6 weeks", "Last 3 months", "YTD"]
 )
 
 if time_mode == "Last 6 weeks":
+
     cutoff = pd.Timestamp.today() - pd.DateOffset(weeks=6)
     df = df[df["date"] >= cutoff]
 
 elif time_mode == "Last 3 months":
+
     cutoff = pd.Timestamp.today() - pd.DateOffset(months=3)
     df = df[df["date"] >= cutoff]
 
 elif time_mode == "YTD":
-    year_start = pd.Timestamp.today().replace(month=1,day=1)
+
+    today = pd.Timestamp.today()
+    year_start = pd.Timestamp(year=today.year, month=1, day=1)
+
     df = df[df["date"] >= year_start]
 
 df = df[df["type"].isin(selected_sports)]
 
 # -------------------------
-# KPI metrics
+# KPIs
 # -------------------------
 
 total_km = df["km"].sum()
 total_hours = df["hours"].sum()
 sessions = len(df)
 
-col1,col2,col3 = st.columns(3)
+col1, col2, col3 = st.columns(3)
 
-col1.metric("Total Distance (km)",f"{total_km:,.0f}")
-col2.metric("Total Hours",f"{total_hours:,.0f}")
-col3.metric("Sessions",f"{sessions:,}")
+col1.metric("Total Distance (km)", f"{total_km:,.0f}")
+col2.metric("Total Hours", f"{total_hours:,.0f}")
+col3.metric("Sessions", f"{sessions:,}")
 
 st.divider()
 
 # -------------------------
-# Weekly training load
+# WEEKLY TRAINING LOAD
 # -------------------------
 
 weekly = df.groupby("week").agg({
-    "hours":"sum",
-    "km":"sum"
+    "hours": "sum",
+    "km": "sum"
 }).reset_index()
 
 weekly = weekly.sort_values("week")
@@ -116,7 +122,8 @@ fig.add_trace(
             "#ef4444" if h < target else "#3b82f6"
             for h in weekly["hours"]
         ],
-        name="Weekly hours"
+        name="Weekly hours",
+        hovertemplate="Week: %{x}<br>Hours: %{y:.1f}<extra></extra>"
     )
 )
 
@@ -126,7 +133,7 @@ fig.add_trace(
         y=weekly["rolling"],
         mode="lines",
         line=dict(width=3),
-        name="4w avg"
+        name="4 week avg"
     )
 )
 
@@ -144,10 +151,10 @@ fig.update_layout(
     height=450
 )
 
-st.plotly_chart(fig,use_container_width=True)
+st.plotly_chart(fig, use_container_width=True)
 
 # -------------------------
-# Heatmap of routes
+# HEATMAP OF ROUTES
 # -------------------------
 
 st.subheader("Training Heatmap")
@@ -156,28 +163,33 @@ points = []
 
 for r in df["raw_json"].dropna():
 
-    activity = json.loads(r)
+    try:
 
-    if "map" in activity and activity["map"]:
+        activity = json.loads(r)
 
-        poly = activity["map"].get("summary_polyline")
+        if "map" in activity and activity["map"]:
 
-        if poly:
+            poly = activity["map"].get("summary_polyline")
 
-            coords = polyline.decode(poly)
+            if poly:
 
-            for lat,lon in coords:
+                coords = polyline.decode(poly)
 
-                points.append([lon,lat])
+                for lat, lon in coords:
+
+                    points.append([lon, lat])
+
+    except:
+        pass
 
 if points:
 
-    heat_df = pd.DataFrame(points,columns=["lon","lat"])
+    heat_df = pd.DataFrame(points, columns=["lon", "lat"])
 
     layer = pdk.Layer(
         "HeatmapLayer",
         heat_df,
-        get_position=["lon","lat"],
+        get_position=["lon", "lat"],
         radiusPixels=40
     )
 
@@ -193,10 +205,12 @@ if points:
     ))
 
 # -------------------------
-# Distance by sport
+# DISTANCE BY SPORT
 # -------------------------
 
 sport_dist = df.groupby("type")["km"].sum().reset_index()
+
+sport_dist = sport_dist.sort_values("km", ascending=False)
 
 fig2 = px.pie(
     sport_dist,
@@ -205,10 +219,10 @@ fig2 = px.pie(
     title="Distance by Sport"
 )
 
-st.plotly_chart(fig2,use_container_width=True)
+st.plotly_chart(fig2, use_container_width=True)
 
 # -------------------------
-# Activity table
+# ACTIVITY TABLE
 # -------------------------
 
 st.subheader("Activities")
@@ -219,9 +233,9 @@ table = df[[
     "type",
     "km",
     "hours"
-]].sort_values("date",ascending=False)
+]].sort_values("date", ascending=False)
 
 table["km"] = table["km"].round(2)
 table["hours"] = table["hours"].round(2)
 
-st.dataframe(table,use_container_width=True)
+st.dataframe(table, use_container_width=True)
