@@ -2,9 +2,10 @@ import json
 import pandas as pd
 import requests
 from json import JSONDecoder
+import os
 
-BOT_TOKEN="8467992856:AAExZnsZCLS9S5y-KktePsQD2KACXRsJfC0"
-CHAT_ID="195248378"
+BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 # -----------------------------
 # Leer JSON robustamente
 # -----------------------------
