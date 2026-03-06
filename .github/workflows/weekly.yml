@@ -23,14 +23,14 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: "3.11"
-      
+
       - name: Install dependencies
         run: pip install pandas requests
 
-      - name: Inicializar base de datos
+      - name: Initialize database
         run: python scripts/init_db.py
-        
-      - name: Ingest new Strava activities
+
+      - name: Ingest Strava activities
         run: python scripts/ingest_strava.py
         env:
           STRAVA_CLIENT_ID: ${{ secrets.STRAVA_CLIENT_ID }}
@@ -43,10 +43,10 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
-      - name: Commit updated dataset
+      - name: Commit updated database
         run: |
           git config --global user.name "strava-bot"
           git config --global user.email "bot@github.com"
-          git add data/strava_full_history.json
-          git commit -m "update activities" || echo "no changes"
+          git add data/activities.db
+          git commit -m "update activities db" || echo "no changes"
           git push
