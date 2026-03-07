@@ -20,7 +20,7 @@ st.set_page_config(
 
 
 # ----------------------------------------------------
-# GLOBAL STYLE
+# STYLE
 # ----------------------------------------------------
 
 st.markdown("""
@@ -33,8 +33,6 @@ body {
 .block-container {
     padding-top: 1rem;
 }
-
-/* KPI cards */
 
 .metric-card {
     background: white;
@@ -52,10 +50,7 @@ body {
 .metric-value {
     font-size: 28px;
     font-weight: 700;
-    color: #111827;
 }
-
-/* sidebar widgets */
 
 .widget {
     background: white;
@@ -65,8 +60,6 @@ body {
     margin-bottom: 20px;
 }
 
-/* filter container */
-
 .filter-box {
     background: white;
     border: 1px solid #E5E7EB;
@@ -74,8 +67,6 @@ body {
     padding: 15px;
     margin-bottom: 20px;
 }
-
-/* soften filter chips */
 
 [data-baseweb="tag"] {
     background-color: #E5E7EB !important;
@@ -192,23 +183,6 @@ atl = latest["fatigue"]
 
 best_row = weekly.loc[weekly["hours"].idxmax()]
 best_week = best_row["hours"]
-best_week_date = best_row["week"]
-
-
-# ----------------------------------------------------
-# TRAINING STREAK
-# ----------------------------------------------------
-
-target = 7
-
-recent = weekly.sort_values("week", ascending=False)
-
-streak = 0
-for h in recent["hours"]:
-    if h >= target:
-        streak += 1
-    else:
-        break
 
 
 # ----------------------------------------------------
@@ -226,7 +200,6 @@ def card(col,title,value):
     </div>
     """, unsafe_allow_html=True)
 
-
 card(c1,"THIS WEEK",f"{current_week:.1f} h")
 card(c2,"4 WEEK AVG",f"{rolling:.1f} h")
 card(c3,"FITNESS (CTL)",f"{ctl:.0f}")
@@ -238,23 +211,55 @@ st.markdown("---")
 
 
 # ----------------------------------------------------
+# ACHIEVEMENTS DETECTION
+# ----------------------------------------------------
+
+achievements = {}
+
+runs = df[df["type"]=="Run"].copy()
+
+if not runs.empty:
+
+    runs["pace"] = runs["moving_time"]/(runs["distance"]/1000)
+
+    for d in [1,5,10,21]:
+
+        subset = runs[runs["distance"]>=d*1000]
+
+        if subset.empty:
+            continue
+
+        row = subset.sort_values("pace").iloc[0]
+
+        achievements.setdefault(row["week"],[]).append("🏃")
+
+if df["max_watts"].notna().any():
+
+    row = df.loc[df["max_watts"].idxmax()]
+    achievements.setdefault(row["week"],[]).append("⚡")
+
+if df["max_hr"].notna().any():
+
+    row = df.loc[df["max_hr"].idxmax()]
+    achievements.setdefault(row["week"],[]).append("❤️")
+
+
+# ----------------------------------------------------
 # LAYOUT
 # ----------------------------------------------------
 
 main, side = st.columns([3,1])
 
 
-# ====================================================
-# MAIN AREA
-# ====================================================
+# ----------------------------------------------------
+# MAIN
+# ----------------------------------------------------
 
 with main:
 
     st.subheader("Weekly Training Load")
 
-    fig = weekly_chart(weekly)
-
-    fig.update_layout(height=300)
+    fig = weekly_chart(weekly, achievements)
 
     st.plotly_chart(
         fig,
@@ -303,9 +308,9 @@ with main:
     )
 
 
-# ====================================================
-# SIDEBAR ANALYTICS
-# ====================================================
+# ----------------------------------------------------
+# SIDEBAR
+# ----------------------------------------------------
 
 with side:
 
@@ -313,7 +318,7 @@ with side:
 
     st.markdown("### 💡 Weekly Insight")
 
-    sessions = df[df["week"] == latest["week"]].shape[0]
+    sessions = df[df["week"]==latest["week"]].shape[0]
 
     load_diff = (current_week - rolling)/rolling*100
 
@@ -327,78 +332,68 @@ with side:
     st.markdown('</div>', unsafe_allow_html=True)
 
 
-    st.markdown('<div class="widget">', unsafe_allow_html=True)
+# ----------------------------------------------------
+# COLLAPSIBLE RECORDS
+# ----------------------------------------------------
 
-    st.markdown("### 🔥 Consistency")
+show_records = st.toggle("🏅 Show performance records")
 
-    st.write(f"Training streak ≥7h")
-    st.write(f"**{streak} weeks**")
+if show_records:
 
-    st.markdown('</div>', unsafe_allow_html=True)
+    col1,col2,col3 = st.columns(3)
 
+    with col1:
 
-    st.markdown('<div class="widget">', unsafe_allow_html=True)
+        st.markdown("### 🏃 Running PRs")
 
-    st.markdown("### 🏃 Running PRs")
+        if not runs.empty:
 
-    runs = df[df["type"]=="Run"].copy()
+            def best(d):
 
-    if not runs.empty:
+                subset = runs[runs["distance"]>=d*1000]
 
-        runs["pace"] = runs["moving_time"]/(runs["distance"]/1000)
+                if subset.empty:
+                    return None
 
-        def best(d):
+                row = subset.sort_values("pace").iloc[0]
 
-            subset = runs[runs["distance"]>=d*1000]
+                p=row["pace"]
 
-            if subset.empty:
-                return None
+                return f"{int(p//60)}:{int(p%60):02d}/km"
 
-            row = subset.sort_values("pace").iloc[0]
-
-            p=row["pace"]
-
-            return f"{int(p//60)}:{int(p%60):02d}/km"
-
-        st.write(f"1 km — **{best(1)}**")
-        st.write(f"5 km — **{best(5)}**")
-        st.write(f"10 km — **{best(10)}**")
-        st.write(f"21 km — **{best(21)}**")
-
-    st.markdown('</div>', unsafe_allow_html=True)
+            st.write(f"1 km — **{best(1)}**")
+            st.write(f"5 km — **{best(5)}**")
+            st.write(f"10 km — **{best(10)}**")
+            st.write(f"21 km — **{best(21)}**")
 
 
-    st.markdown('<div class="widget">', unsafe_allow_html=True)
+    with col2:
 
-    st.markdown("### ⚡ Power Records")
+        st.markdown("### ⚡ Power Records")
 
-    bike = df[df["type"]=="Ride"]
+        bike = df[df["type"]=="Ride"]
 
-    if bike["max_watts"].notna().any():
+        if bike["max_watts"].notna().any():
 
-        row=bike.loc[bike["max_watts"].idxmax()]
-        st.write(f"Max power: **{int(row['max_watts'])} W**")
+            row=bike.loc[bike["max_watts"].idxmax()]
+            st.write(f"Max power — **{int(row['max_watts'])} W**")
 
-    if bike["avg_watts"].notna().any():
+        if bike["avg_watts"].notna().any():
 
-        row=bike.loc[bike["avg_watts"].idxmax()]
-        st.write(f"Best avg: **{int(row['avg_watts'])} W**")
-
-    st.markdown('</div>', unsafe_allow_html=True)
+            row=bike.loc[bike["avg_watts"].idxmax()]
+            st.write(f"Best avg — **{int(row['avg_watts'])} W**")
 
 
-    st.markdown('<div class="widget">', unsafe_allow_html=True)
+    with col3:
 
-    st.markdown("### ❤️ Heart Rate")
+        st.markdown("### ❤️ Heart Rate")
 
-    if df["max_hr"].notna().any():
+        if df["max_hr"].notna().any():
 
-        row=df.loc[df["max_hr"].idxmax()]
-        st.write(f"Max HR: **{int(row['max_hr'])} bpm**")
+            row=df.loc[df["max_hr"].idxmax()]
+            st.write(f"Max HR — **{int(row['max_hr'])} bpm**")
 
-    if df["avg_hr"].notna().any():
+        if df["avg_hr"].notna().any():
 
-        row=df.loc[df["avg_hr"].idxmax()]
-        st.write(f"Best avg HR: **{int(row['avg_hr'])} bpm**")
-
-    st.markdown('</div>', unsafe_allow_html=True)
+            row=df.loc[df["avg_hr"].idxmax()]
+            st.write(f"Best avg HR — **{int(row['avg_hr'])} bpm**")
