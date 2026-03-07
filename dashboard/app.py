@@ -50,32 +50,34 @@ def load_data():
         type,
         start_date,
         distance,
-        moving_time,
-        average_heartrate,
-        max_heartrate,
-        average_watts,
-        max_watts,
-        location_city,
-        location_state,
-        location_country
+        moving_time
         FROM activities
     """, conn)
 
     conn.close()
 
     df["date"] = pd.to_datetime(df["start_date"])
+
     df["hours"] = df["moving_time"] / 3600
     df["km"] = df["distance"] / 1000
 
     df["year"] = df["date"].dt.year
     df["week"] = df["date"].dt.to_period("W").apply(lambda r: r.start_time)
 
-    df["location"] = (
-        df["location_city"]
-        .fillna(df["location_state"])
-        .fillna(df["location_country"])
-        .fillna(df["name"])
-    )
+    # fallback location
+    df["location"] = df["name"]
+
+    # columnas opcionales (si existen)
+    optional_cols = [
+        "average_heartrate",
+        "max_heartrate",
+        "average_watts",
+        "max_watts",
+    ]
+
+    for col in optional_cols:
+        if col not in df.columns:
+            df[col] = None
 
     return df
 
