@@ -57,7 +57,6 @@ def load_data():
     conn.close()
 
     df["date"] = pd.to_datetime(df["start_date"])
-
     df["hours"] = df["moving_time"] / 3600
     df["km"] = df["distance"] / 1000
 
@@ -67,12 +66,12 @@ def load_data():
     # fallback location
     df["location"] = df["name"]
 
-    # columnas opcionales (si existen)
+    # optional columns (future proof)
     optional_cols = [
         "average_heartrate",
         "max_heartrate",
         "average_watts",
-        "max_watts",
+        "max_watts"
     ]
 
     for col in optional_cols:
@@ -125,7 +124,7 @@ weekly["rolling4"] = weekly["hours"].rolling(4).mean()
 record_week = weekly.loc[weekly["hours"].idxmax()]
 
 # -----------------------------
-# FITNESS / FATIGUE MODEL
+# FITNESS MODEL
 # -----------------------------
 
 weekly["fitness"] = weekly["hours"].ewm(span=42).mean()
@@ -270,7 +269,7 @@ st.plotly_chart(
 )
 
 # -----------------------------
-# RUNNING PRS
+# RUNNING PRs
 # -----------------------------
 
 run = df[df["type"].str.contains("Run", na=False)].copy()
@@ -313,44 +312,70 @@ for label, dist in distances.items():
 running_pr = pd.DataFrame(records)
 
 # -----------------------------
-# POWER RECORDS
+# POWER RECORDS (SAFE)
 # -----------------------------
 
-bike = df[df["type"].str.contains("Ride", na=False)]
+power_records = pd.DataFrame()
 
-power_records = pd.DataFrame([
-    {
-        "Metric": "Max Power",
-        "Value": f"{bike['max_watts'].max():.0f} W",
-        "Date": bike.loc[bike["max_watts"].idxmax()]["date"].date(),
-        "Location": bike.loc[bike["max_watts"].idxmax()]["location"]
-    },
-    {
-        "Metric": "Best Avg Power",
-        "Value": f"{bike['average_watts'].max():.0f} W",
-        "Date": bike.loc[bike["average_watts"].idxmax()]["date"].date(),
-        "Location": bike.loc[bike["average_watts"].idxmax()]["location"]
-    }
-])
+if "max_watts" in df.columns and df["max_watts"].notna().any():
+
+    bike = df[df["type"].str.contains("Ride", na=False)]
+
+    if len(bike) > 0:
+
+        try:
+
+            max_power_row = bike.loc[bike["max_watts"].idxmax()]
+            best_avg_row = bike.loc[bike["average_watts"].idxmax()]
+
+            power_records = pd.DataFrame([
+                {
+                    "Metric": "Max Power",
+                    "Value": f"{max_power_row['max_watts']:.0f} W",
+                    "Date": max_power_row["date"].date(),
+                    "Location": max_power_row["location"]
+                },
+                {
+                    "Metric": "Best Avg Power",
+                    "Value": f"{best_avg_row['average_watts']:.0f} W",
+                    "Date": best_avg_row["date"].date(),
+                    "Location": best_avg_row["location"]
+                }
+            ])
+
+        except:
+            power_records = pd.DataFrame()
 
 # -----------------------------
-# HR RECORDS
+# HR RECORDS (SAFE)
 # -----------------------------
 
-hr_records = pd.DataFrame([
-    {
-        "Metric": "Max Heart Rate",
-        "Value": f"{df['max_heartrate'].max():.0f} bpm",
-        "Date": df.loc[df["max_heartrate"].idxmax()]["date"].date(),
-        "Location": df.loc[df["max_heartrate"].idxmax()]["location"]
-    },
-    {
-        "Metric": "Highest Avg Heart Rate",
-        "Value": f"{df['average_heartrate'].max():.0f} bpm",
-        "Date": df.loc[df["average_heartrate"].idxmax()]["date"].date(),
-        "Location": df.loc[df["average_heartrate"].idxmax()]["location"]
-    }
-])
+hr_records = pd.DataFrame()
+
+if "max_heartrate" in df.columns and df["max_heartrate"].notna().any():
+
+    try:
+
+        max_hr_row = df.loc[df["max_heartrate"].idxmax()]
+        avg_hr_row = df.loc[df["average_heartrate"].idxmax()]
+
+        hr_records = pd.DataFrame([
+            {
+                "Metric": "Max Heart Rate",
+                "Value": f"{max_hr_row['max_heartrate']:.0f} bpm",
+                "Date": max_hr_row["date"].date(),
+                "Location": max_hr_row["location"]
+            },
+            {
+                "Metric": "Highest Avg Heart Rate",
+                "Value": f"{avg_hr_row['average_heartrate']:.0f} bpm",
+                "Date": avg_hr_row["date"].date(),
+                "Location": avg_hr_row["location"]
+            }
+        ])
+
+    except:
+        hr_records = pd.DataFrame()
 
 # -----------------------------
 # RECORDS
@@ -364,7 +389,13 @@ with tab1:
     st.dataframe(running_pr, use_container_width=True)
 
 with tab2:
-    st.dataframe(power_records, use_container_width=True)
+    if len(power_records) > 0:
+        st.dataframe(power_records, use_container_width=True)
+    else:
+        st.info("Power data not available")
 
 with tab3:
-    st.dataframe(hr_records, use_container_width=True)
+    if len(hr_records) > 0:
+        st.dataframe(hr_records, use_container_width=True)
+    else:
+        st.info("Heart rate data not available")
