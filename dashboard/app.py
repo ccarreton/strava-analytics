@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+import json
 
 from data import load_data
 from filters import apply_filters
@@ -19,8 +20,6 @@ st.set_page_config(
 
 st.set_option("client.showErrorDetails", True)
 
-# mobile padding
-
 st.markdown("""
 <style>
 .block-container {
@@ -29,7 +28,6 @@ st.markdown("""
 }
 </style>
 """, unsafe_allow_html=True)
-
 
 st.title("🏃 Strava Training Dashboard")
 
@@ -40,33 +38,9 @@ st.title("🏃 Strava Training Dashboard")
 
 df = load_data()
 
-if df is None or df.empty:
+if df.empty:
     st.warning("No activities available in database.")
     st.stop()
-
-
-# -------------------------
-# DATA SANITY CHECK
-# -------------------------
-
-required_columns = ["date", "week", "hours"]
-
-missing = [c for c in required_columns if c not in df.columns]
-
-if missing:
-    st.error(f"Dataset missing columns: {missing}")
-    st.stop()
-
-# asegurar tipos
-
-df["date"] = pd.to_datetime(df["date"], errors="coerce")
-df = df.dropna(subset=["date"])
-
-df["week"] = pd.to_datetime(df["week"], errors="coerce")
-df = df.dropna(subset=["week"])
-
-df["hours"] = pd.to_numeric(df["hours"], errors="coerce")
-df = df.dropna(subset=["hours"])
 
 
 # -------------------------
@@ -75,9 +49,26 @@ df = df.dropna(subset=["hours"])
 
 df = apply_filters(df)
 
-if df is None or df.empty:
+if df.empty:
     st.warning("No activities match selected filters.")
     st.stop()
+
+
+# -------------------------
+# PARSE RAW JSON
+# -------------------------
+
+if "raw_json" in df.columns:
+
+    parsed = df["raw_json"].apply(
+        lambda x: json.loads(x) if pd.notnull(x) else {}
+    )
+
+    df["max_watts"] = parsed.apply(lambda x: x.get("max_watts"))
+    df["average_watts"] = parsed.apply(lambda x: x.get("average_watts"))
+
+    df["max_heartrate"] = parsed.apply(lambda x: x.get("max_heartrate"))
+    df["average_heartrate"] = parsed.apply(lambda x: x.get("average_heartrate"))
 
 
 st.caption(f"{len(df)} activities loaded")
@@ -97,8 +88,6 @@ if weekly.empty:
     st.warning("No weekly data available.")
     st.stop()
 
-
-# rolling load
 
 weekly["rolling"] = weekly["hours"].rolling(
     ROLLING_WINDOW,
@@ -131,6 +120,7 @@ latest = weekly.iloc[-1]
 
 current_week = latest["hours"]
 rolling = latest["rolling"]
+
 ctl = latest["fitness"]
 atl = latest["fatigue"]
 
@@ -191,10 +181,7 @@ fig2.add_trace(
         x=weekly["week"],
         y=weekly["form"],
         name="Form (TSB)",
-        line=dict(
-            width=2,
-            dash="dot"
-        )
+        line=dict(width=2, dash="dot")
     )
 )
 
@@ -215,18 +202,18 @@ st.plotly_chart(
     config={"displayModeBar": False}
 )
 
+
 # -------------------------
 # WEEKLY INSIGHT
 # -------------------------
 
 st.subheader("💡 Weekly Insight")
 
-current_week = latest["hours"]
-rolling_avg = latest["rolling"]
-
 sessions_week = df[df["week"] == latest["week"]].shape[0]
 
-load_diff = ((current_week - rolling_avg) / rolling_avg) * 100 if rolling_avg > 0 else 0
+load_diff = (
+    (current_week - rolling) / rolling * 100
+) if rolling > 0 else 0
 
 trend = "increasing 📈" if weekly["fitness"].iloc[-1] > weekly["fitness"].iloc[-2] else "stable"
 
@@ -236,13 +223,19 @@ st.markdown(f"""
 **Sessions this week:** {sessions_week}  
 **Fitness trend:** {trend}
 """)
+
+
+# -------------------------
+# RUNNING PRs
+# -------------------------
+
 st.subheader("🏃 Running PRs")
 
 runs = df[df["type"] == "Run"].copy()
 
 if not runs.empty:
 
-    runs["pace"] = runs["moving_time"] / runs["distance"]
+    runs["pace_sec_km"] = runs["moving_time"] / (runs["distance"] / 1000)
 
     def best(distance_km):
 
@@ -252,11 +245,12 @@ if not runs.empty:
         if subset.empty:
             return None
 
-        best = subset.sort_values("pace").iloc[0]
+        best = subset.sort_values("pace_sec_km").iloc[0]
 
-        pace = best["pace"] / 60
-        minutes = int(pace)
-        seconds = int((pace - minutes) * 60)
+        pace = best["pace_sec_km"]
+
+        minutes = int(pace // 60)
+        seconds = int(pace % 60)
 
         return {
             "Distance": f"{distance_km} km",
@@ -271,36 +265,46 @@ if not runs.empty:
     if prs:
         st.dataframe(pd.DataFrame(prs), use_container_width=True)
 
+
+# -------------------------
+# CYCLING POWER RECORDS
+# -------------------------
+
 st.subheader("⚡ Cycling Power Records")
 
-bike = df[df["type"] == "Ride"]
+bike = df[df["type"] == "Ride"].copy()
 
 records = []
 
-if "max_watts" in bike.columns and not bike["max_watts"].isna().all():
+if "max_watts" in bike.columns and bike["max_watts"].notna().any():
 
     row = bike.loc[bike["max_watts"].idxmax()]
 
     records.append({
-        "Metric":"Max Power",
-        "Value":f"{row['max_watts']} W",
-        "Date":row["date"].date(),
-        "Location":row["location"]
+        "Metric": "Max Power",
+        "Value": f"{int(row['max_watts'])} W",
+        "Date": row["date"].date(),
+        "Location": row["location"]
     })
 
-if "average_watts" in bike.columns and not bike["average_watts"].isna().all():
+if "average_watts" in bike.columns and bike["average_watts"].notna().any():
 
     row = bike.loc[bike["average_watts"].idxmax()]
 
     records.append({
-        "Metric":"Best Avg Power",
-        "Value":f"{row['average_watts']} W",
-        "Date":row["date"].date(),
-        "Location":row["location"]
+        "Metric": "Best Avg Power",
+        "Value": f"{int(row['average_watts'])} W",
+        "Date": row["date"].date(),
+        "Location": row["location"]
     })
 
 if records:
     st.dataframe(pd.DataFrame(records), use_container_width=True)
+
+
+# -------------------------
+# HEART RATE RECORDS
+# -------------------------
 
 st.subheader("❤️ Heart Rate Records")
 
@@ -308,26 +312,26 @@ hr = df.copy()
 
 records = []
 
-if "max_heartrate" in hr.columns and not hr["max_heartrate"].isna().all():
+if "max_heartrate" in hr.columns and hr["max_heartrate"].notna().any():
 
     row = hr.loc[hr["max_heartrate"].idxmax()]
 
     records.append({
-        "Metric":"Max Heart Rate",
-        "Value":f"{row['max_heartrate']} bpm",
-        "Date":row["date"].date(),
-        "Location":row["location"]
+        "Metric": "Max Heart Rate",
+        "Value": f"{int(row['max_heartrate'])} bpm",
+        "Date": row["date"].date(),
+        "Location": row["location"]
     })
 
-if "average_heartrate" in hr.columns and not hr["average_heartrate"].isna().all():
+if "average_heartrate" in hr.columns and hr["average_heartrate"].notna().any():
 
     row = hr.loc[hr["average_heartrate"].idxmax()]
 
     records.append({
-        "Metric":"Highest Avg HR",
-        "Value":f"{row['average_heartrate']} bpm",
-        "Date":row["date"].date(),
-        "Location":row["location"]
+        "Metric": "Highest Avg HR",
+        "Value": f"{int(row['average_heartrate'])} bpm",
+        "Date": row["date"].date(),
+        "Location": row["location"]
     })
 
 if records:
