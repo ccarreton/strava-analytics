@@ -1,11 +1,15 @@
 import plotly.graph_objects as go
 import numpy as np
-from config import TARGET_WEEKLY_HOURS, ROLLING_WINDOW
+from config import TARGET_WEEKLY_HOURS
 
 
 def weekly_chart(weekly):
 
-    colors = np.where(weekly["hours"] < TARGET_WEEKLY_HOURS, "#ff4d4d", "#4A7DFF")
+    colors = np.where(
+        weekly["hours"] < TARGET_WEEKLY_HOURS,
+        "#ff4d4d",
+        "#4A7DFF"
+    )
 
     fig = go.Figure()
 
@@ -14,7 +18,7 @@ def weekly_chart(weekly):
             x=weekly["week"],
             y=weekly["hours"],
             name="Weekly hours",
-            marker_color=colors,
+            marker_color=colors
         )
     )
 
@@ -23,7 +27,7 @@ def weekly_chart(weekly):
             x=weekly["week"],
             y=weekly["rolling"],
             name="4 week avg",
-            line=dict(width=3),
+            line=dict(width=3)
         )
     )
 
@@ -31,7 +35,7 @@ def weekly_chart(weekly):
         y=TARGET_WEEKLY_HOURS,
         line_dash="dash",
         line_color="green",
-        annotation_text="target",
+        annotation_text="target"
     )
 
     fig.update_layout(
@@ -41,8 +45,8 @@ def weekly_chart(weekly):
             orientation="h",
             y=1.02,
             x=0.5,
-            xanchor="center",
-        ),
+            xanchor="center"
+        )
     )
 
     fig.update_xaxes(nticks=6)
