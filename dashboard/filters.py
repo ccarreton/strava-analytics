@@ -4,10 +4,17 @@ import streamlit as st
 
 def apply_filters(df):
 
-    # aseguramos tipo datetime SIEMPRE
+    # asegurar columna date
+    if "date" not in df.columns:
+        return df
+
+    # convertir SIEMPRE a datetime
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
 
-    with st.expander("Filters"):
+    # eliminar fechas corruptas
+    df = df.dropna(subset=["date"])
+
+    with st.expander("Filters", expanded=True):
 
         sports = st.multiselect(
             "Sport",
@@ -24,11 +31,11 @@ def apply_filters(df):
     if sports:
         df = df[df["type"].isin(sports)]
 
-    # fecha actual
-    now = pd.Timestamp.now()
+    # si ya no hay datos, salimos
+    if df.empty:
+        return df
 
-    # definimos cutoff
-    cutoff = None
+    now = pd.Timestamp.now()
 
     if time_range == "YTD":
         cutoff = now - pd.DateOffset(months=12)
@@ -39,12 +46,17 @@ def apply_filters(df):
     elif time_range == "4YTD":
         cutoff = now - pd.DateOffset(years=4)
 
-    # aplicamos filtro si procede
+    else:
+        cutoff = None
+
     if cutoff is not None:
 
-        # volvemos a asegurar datetime
+        # aseguramos datetime otra vez
         df["date"] = pd.to_datetime(df["date"], errors="coerce")
 
-        df = df[df["date"] >= cutoff]
+        # eliminamos posibles NaT
+        df = df[df["date"].notna()]
+
+        df = df.loc[df["date"] >= cutoff]
 
     return df
