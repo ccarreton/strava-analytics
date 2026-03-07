@@ -27,13 +27,13 @@ def load_data():
 
     # sanitize types
     df["date"] = pd.to_datetime(df["start_date"], errors="coerce")
+    
     df = df.dropna(subset=["date"])
-
+    
     df["hours"] = df["moving_time"] / 3600
     df["km"] = df["distance"] / 1000
-
+    
     df["week"] = df["date"].dt.to_period("W").apply(lambda r: r.start_time)
-
     df["location"] = df["name"]
 
     return df
