@@ -13,7 +13,8 @@ def load_data():
             type,
             start_date,
             distance,
-            moving_time
+            moving_time,
+            raw_json
         FROM activities
     """, conn)
 
