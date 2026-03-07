@@ -1,27 +1,49 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime
 import numpy as np
 
 st.set_page_config(
     page_title="Strava Training Dashboard",
-    layout="wide"
+    layout="centered"
 )
 
-# -----------------------------------------------------
+# -----------------------------
+# MOBILE CSS FIX
+# -----------------------------
+
+st.markdown("""
+<style>
+
+.block-container {
+    padding-top: 1rem;
+    padding-bottom: 0rem;
+    padding-left: 0.6rem;
+    padding-right: 0.6rem;
+}
+
+[data-testid="stPlotlyChart"] {
+    width: 100%;
+}
+
+h2 {
+    margin-top: 0.5rem;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+# -----------------------------
 # LOAD DATA
-# -----------------------------------------------------
+# -----------------------------
 
 @st.cache_data
 def load_data():
 
     conn = sqlite3.connect("data/activities.db")
 
-    df = pd.read_sql(
-        """
+    df = pd.read_sql("""
         SELECT
         id,
         name,
@@ -37,9 +59,7 @@ def load_data():
         location_state,
         location_country
         FROM activities
-        """,
-        conn
-    )
+    """, conn)
 
     conn.close()
 
@@ -50,7 +70,6 @@ def load_data():
     df["year"] = df["date"].dt.year
     df["week"] = df["date"].dt.to_period("W").apply(lambda r: r.start_time)
 
-    # location fallback
     df["location"] = (
         df["location_city"]
         .fillna(df["location_state"])
@@ -63,9 +82,9 @@ def load_data():
 
 df = load_data()
 
-# -----------------------------------------------------
+# -----------------------------
 # FILTERS
-# -----------------------------------------------------
+# -----------------------------
 
 with st.expander("Filters"):
 
@@ -93,9 +112,9 @@ elif time_range == "2YTD":
 elif time_range == "4YTD":
     df = df[df["date"] >= now - pd.DateOffset(years=4)]
 
-# -----------------------------------------------------
+# -----------------------------
 # WEEKLY LOAD
-# -----------------------------------------------------
+# -----------------------------
 
 weekly = df.groupby("week")["hours"].sum().reset_index()
 
@@ -103,35 +122,41 @@ weekly["rolling4"] = weekly["hours"].rolling(4).mean()
 
 record_week = weekly.loc[weekly["hours"].idxmax()]
 
-# -----------------------------------------------------
-# KPIs
-# -----------------------------------------------------
+# -----------------------------
+# FITNESS / FATIGUE MODEL
+# -----------------------------
 
-current_week = weekly.iloc[-1]["hours"]
-rolling_4 = weekly.iloc[-1]["rolling4"]
-
-# Fitness model
 weekly["fitness"] = weekly["hours"].ewm(span=42).mean()
 weekly["fatigue"] = weekly["hours"].ewm(span=7).mean()
 weekly["form"] = weekly["fitness"] - weekly["fatigue"]
 
+# -----------------------------
+# KPIs
+# -----------------------------
+
+current_week = weekly.iloc[-1]["hours"]
+rolling_4 = weekly.iloc[-1]["rolling4"]
+
 ctl = weekly.iloc[-1]["fitness"]
 atl = weekly.iloc[-1]["fatigue"]
 
-k1, k2, k3, k4 = st.columns(4)
+c1, c2 = st.columns(2)
 
-k1.metric("This week", f"{current_week:.1f} h")
-k2.metric("4 week avg", f"{rolling_4:.1f} h")
-k3.metric("Fitness (CTL)", f"{ctl:.0f}")
-k4.metric("Fatigue (ATL)", f"{atl:.0f}")
+with c1:
+    st.metric("This week", f"{current_week:.1f} h")
+    st.metric("Fitness (CTL)", f"{ctl:.0f}")
 
-# -----------------------------------------------------
+with c2:
+    st.metric("4 week avg", f"{rolling_4:.1f} h")
+    st.metric("Fatigue (ATL)", f"{atl:.0f}")
+
+# -----------------------------
 # WEEKLY LOAD CHART
-# -----------------------------------------------------
+# -----------------------------
 
 st.subheader("Weekly Training Load")
 
-colors = np.where(weekly["hours"] < 7.5, "red", "#4A7DFF")
+colors = np.where(weekly["hours"] < 7.5, "#ff4d4d", "#4A7DFF")
 
 fig = go.Figure()
 
@@ -168,23 +193,29 @@ fig.add_annotation(
 )
 
 fig.update_layout(
-    height=350,
+    height=280,
+    margin=dict(l=5, r=5, t=30, b=5),
     legend=dict(
         orientation="h",
-        yanchor="bottom",
         y=1.02,
-        xanchor="center",
-        x=0.5
+        x=0.5,
+        xanchor="center"
     ),
     xaxis_title="Week",
     yaxis_title="Hours"
 )
 
-st.plotly_chart(fig, use_container_width=True)
+fig.update_xaxes(nticks=6)
 
-# -----------------------------------------------------
-# FITNESS FATIGUE MODEL
-# -----------------------------------------------------
+st.plotly_chart(
+    fig,
+    use_container_width=True,
+    config={"displayModeBar": False}
+)
+
+# -----------------------------
+# FITNESS FATIGUE CHART
+# -----------------------------
 
 st.subheader("Fitness / Fatigue Model")
 
@@ -194,7 +225,7 @@ fig2.add_trace(
     go.Scatter(
         x=weekly["week"],
         y=weekly["fitness"],
-        name="Fitness",
+        name="Fitness (CTL)",
         line=dict(width=3)
     )
 )
@@ -203,7 +234,7 @@ fig2.add_trace(
     go.Scatter(
         x=weekly["week"],
         y=weekly["fatigue"],
-        name="Fatigue",
+        name="Fatigue (ATL)",
         line=dict(width=3)
     )
 )
@@ -212,13 +243,14 @@ fig2.add_trace(
     go.Scatter(
         x=weekly["week"],
         y=weekly["form"],
-        name="Form",
+        name="Form (TSB)",
         line=dict(dash="dot")
     )
 )
 
 fig2.update_layout(
-    height=350,
+    height=280,
+    margin=dict(l=5, r=5, t=30, b=5),
     legend=dict(
         orientation="h",
         y=1.02,
@@ -227,11 +259,17 @@ fig2.update_layout(
     )
 )
 
-st.plotly_chart(fig2, use_container_width=True)
+fig2.update_xaxes(nticks=6)
 
-# -----------------------------------------------------
-# RUNNING PRs
-# -----------------------------------------------------
+st.plotly_chart(
+    fig2,
+    use_container_width=True,
+    config={"displayModeBar": False}
+)
+
+# -----------------------------
+# RUNNING PRS
+# -----------------------------
 
 run = df[df["type"].str.contains("Run", na=False)].copy()
 
@@ -272,9 +310,9 @@ for label, dist in distances.items():
 
 running_pr = pd.DataFrame(records)
 
-# -----------------------------------------------------
+# -----------------------------
 # POWER RECORDS
-# -----------------------------------------------------
+# -----------------------------
 
 bike = df[df["type"].str.contains("Ride", na=False)]
 
@@ -293,9 +331,9 @@ power_records = pd.DataFrame([
     }
 ])
 
-# -----------------------------------------------------
+# -----------------------------
 # HR RECORDS
-# -----------------------------------------------------
+# -----------------------------
 
 hr_records = pd.DataFrame([
     {
@@ -312,13 +350,13 @@ hr_records = pd.DataFrame([
     }
 ])
 
-# -----------------------------------------------------
-# RECORDS SECTION
-# -----------------------------------------------------
+# -----------------------------
+# RECORDS
+# -----------------------------
 
 st.subheader("Performance Records")
 
-tab1, tab2, tab3 = st.tabs(["🏃 Running", "⚡ Power", "❤️ Heart rate"])
+tab1, tab2, tab3 = st.tabs(["🏃 Running", "⚡ Power", "❤️ Heart Rate"])
 
 with tab1:
     st.dataframe(running_pr, use_container_width=True)
