@@ -50,6 +50,8 @@ st.caption(f"{len(df)} activities loaded")
 # WEEKLY AGGREGATION
 # -------------------------
 
+
+
 weekly = df.groupby("week", as_index=False)["hours"].sum()
 
 if weekly.empty:
