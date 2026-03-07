@@ -29,6 +29,7 @@ def load_data():
     df["date"] = pd.to_datetime(df["start_date"], errors="coerce")
     
     df = df.dropna(subset=["date"])
+    df["date"] = df["date"].astype("datetime64[ns]")
     
     df["hours"] = df["moving_time"] / 3600
     df["km"] = df["distance"] / 1000
