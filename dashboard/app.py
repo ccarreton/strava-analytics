@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.graph_objects as go
 
 from data import load_data
 from filters import apply_filters
@@ -7,12 +8,19 @@ from charts import weekly_chart
 from config import ROLLING_WINDOW, CTL_WINDOW, ATL_WINDOW
 
 
+# -------------------------
+# PAGE CONFIG
+# -------------------------
+
 st.set_page_config(
     page_title="Strava Training Dashboard",
     layout="centered"
 )
 
+st.set_option("client.showErrorDetails", True)
+
 # mobile padding
+
 st.markdown("""
 <style>
 .block-container {
@@ -22,7 +30,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+
 st.title("🏃 Strava Training Dashboard")
+
 
 # -------------------------
 # LOAD DATA
@@ -30,9 +40,34 @@ st.title("🏃 Strava Training Dashboard")
 
 df = load_data()
 
-if df.empty:
+if df is None or df.empty:
     st.warning("No activities available in database.")
     st.stop()
+
+
+# -------------------------
+# DATA SANITY CHECK
+# -------------------------
+
+required_columns = ["date", "week", "hours"]
+
+missing = [c for c in required_columns if c not in df.columns]
+
+if missing:
+    st.error(f"Dataset missing columns: {missing}")
+    st.stop()
+
+# asegurar tipos
+
+df["date"] = pd.to_datetime(df["date"], errors="coerce")
+df = df.dropna(subset=["date"])
+
+df["week"] = pd.to_datetime(df["week"], errors="coerce")
+df = df.dropna(subset=["week"])
+
+df["hours"] = pd.to_numeric(df["hours"], errors="coerce")
+df = df.dropna(subset=["hours"])
+
 
 # -------------------------
 # APPLY FILTERS
@@ -40,28 +75,36 @@ if df.empty:
 
 df = apply_filters(df)
 
-if df.empty:
+if df is None or df.empty:
     st.warning("No activities match selected filters.")
     st.stop()
 
+
 st.caption(f"{len(df)} activities loaded")
+
 
 # -------------------------
 # WEEKLY AGGREGATION
 # -------------------------
 
-
-
-weekly = df.groupby("week", as_index=False)["hours"].sum()
+weekly = (
+    df.groupby("week", as_index=False)["hours"]
+    .sum()
+    .sort_values("week")
+)
 
 if weekly.empty:
     st.warning("No weekly data available.")
     st.stop()
 
+
+# rolling load
+
 weekly["rolling"] = weekly["hours"].rolling(
     ROLLING_WINDOW,
     min_periods=1
 ).mean()
+
 
 # -------------------------
 # FITNESS MODEL
@@ -79,15 +122,17 @@ weekly["fatigue"] = weekly["hours"].ewm(
 
 weekly["form"] = weekly["fitness"] - weekly["fatigue"]
 
+
 # -------------------------
 # KPIs
 # -------------------------
 
-current_week = weekly.iloc[-1]["hours"]
-rolling = weekly.iloc[-1]["rolling"]
+latest = weekly.iloc[-1]
 
-ctl = weekly.iloc[-1]["fitness"]
-atl = weekly.iloc[-1]["fatigue"]
+current_week = latest["hours"]
+rolling = latest["rolling"]
+ctl = latest["fitness"]
+atl = latest["fatigue"]
 
 c1, c2 = st.columns(2)
 
@@ -98,6 +143,7 @@ with c1:
 with c2:
     st.metric("4 week avg", f"{rolling:.1f} h")
     st.metric("Fatigue (ATL)", f"{atl:.0f}")
+
 
 # -------------------------
 # WEEKLY LOAD CHART
@@ -113,13 +159,12 @@ st.plotly_chart(
     config={"displayModeBar": False}
 )
 
+
 # -------------------------
 # FITNESS MODEL CHART
 # -------------------------
 
 st.subheader("Fitness / Fatigue Model")
-
-import plotly.graph_objects as go
 
 fig2 = go.Figure()
 
