@@ -5,6 +5,7 @@ from config import TARGET_WEEKLY_HOURS
 
 def weekly_chart(weekly):
 
+    record_week = weekly.loc[weekly["hours"].idxmax()]
     colors = np.where(
         weekly["hours"] < TARGET_WEEKLY_HOURS,
         "#ff4d4d",
@@ -49,6 +50,13 @@ def weekly_chart(weekly):
         )
     )
 
+    fig.add_annotation(
+    x=record_week["week"],
+    y=record_week["hours"],
+    text="⭐ record",
+    showarrow=True,
+    arrowhead=2
+)
     fig.update_xaxes(nticks=6)
 
     return fig
