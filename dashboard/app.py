@@ -1,174 +1,137 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
-import plotly.graph_objects as go
 import plotly.express as px
+import plotly.graph_objects as go
+from datetime import datetime
+import numpy as np
 
-st.set_page_config(page_title="Strava Training Dashboard", layout="wide")
+st.set_page_config(
+    page_title="Strava Training Dashboard",
+    layout="wide"
+)
 
-st.title("🏃 Strava Training Dashboard")
-
-# -------------------------
+# -----------------------------------------------------
 # LOAD DATA
-# -------------------------
+# -----------------------------------------------------
 
 @st.cache_data
 def load_data():
 
     conn = sqlite3.connect("data/activities.db")
-    df = pd.read_sql_query("SELECT * FROM activities", conn)
+
+    df = pd.read_sql(
+        """
+        SELECT
+        id,
+        name,
+        type,
+        start_date,
+        distance,
+        moving_time,
+        average_heartrate,
+        max_heartrate,
+        average_watts,
+        max_watts,
+        location_city,
+        location_state,
+        location_country
+        FROM activities
+        """,
+        conn
+    )
+
     conn.close()
+
+    df["date"] = pd.to_datetime(df["start_date"])
+    df["hours"] = df["moving_time"] / 3600
+    df["km"] = df["distance"] / 1000
+
+    df["year"] = df["date"].dt.year
+    df["week"] = df["date"].dt.to_period("W").apply(lambda r: r.start_time)
+
+    # location fallback
+    df["location"] = (
+        df["location_city"]
+        .fillna(df["location_state"])
+        .fillna(df["location_country"])
+        .fillna(df["name"])
+    )
 
     return df
 
 
 df = load_data()
 
-# -------------------------
-# FEATURE ENGINEERING
-# -------------------------
+# -----------------------------------------------------
+# FILTERS
+# -----------------------------------------------------
 
-df["date"] = pd.to_datetime(df["start_date"], utc=True).dt.tz_localize(None)
+with st.expander("Filters"):
 
-# ignoramos histórico antiguo
-df = df[df["date"] >= "2022-01-01"]
+    sports = st.multiselect(
+        "Sport",
+        df["type"].unique(),
+        default=df["type"].unique()
+    )
 
-df["km"] = df["distance"] / 1000
-df["hours"] = df["moving_time"] / 3600
+    time_range = st.radio(
+        "Time range",
+        ["All time", "YTD", "2YTD", "4YTD"]
+    )
 
-df["week"] = df["date"] - pd.to_timedelta(df["date"].dt.weekday, unit="d")
-df["week"] = df["week"].dt.normalize()
+df = df[df["type"].isin(sports)]
 
-# copia para cálculos históricos
-df_original = df.copy()
+now = pd.Timestamp.now()
 
-# -------------------------
-# SIDEBAR FILTERS
-# -------------------------
+if time_range == "YTD":
+    df = df[df["date"] >= now - pd.DateOffset(months=12)]
 
-st.sidebar.header("Filters")
+elif time_range == "2YTD":
+    df = df[df["date"] >= now - pd.DateOffset(years=2)]
 
-sports = sorted(df["type"].dropna().unique())
+elif time_range == "4YTD":
+    df = df[df["date"] >= now - pd.DateOffset(years=4)]
 
-selected_sports = st.sidebar.multiselect(
-    "Sport",
-    options=sports,
-    default=sports
-)
+# -----------------------------------------------------
+# WEEKLY LOAD
+# -----------------------------------------------------
 
-time_mode = st.sidebar.radio(
-    "Time range",
-    [
-        "All time",
-        "Last 6 weeks",
-        "Last 3 months",
-        "YTD (12M moving)",
-        "2YTD",
-        "4YTD"
-    ]
-)
+weekly = df.groupby("week")["hours"].sum().reset_index()
 
-today = pd.Timestamp.today()
+weekly["rolling4"] = weekly["hours"].rolling(4).mean()
 
-if time_mode == "Last 6 weeks":
+record_week = weekly.loc[weekly["hours"].idxmax()]
 
-    cutoff = today - pd.DateOffset(weeks=6)
-
-elif time_mode == "Last 3 months":
-
-    cutoff = today - pd.DateOffset(months=3)
-
-elif time_mode == "YTD (12M moving)":
-
-    cutoff = today - pd.DateOffset(months=12)
-
-elif time_mode == "2YTD":
-
-    cutoff = pd.Timestamp(year=today.year-2, month=1, day=1)
-
-elif time_mode == "4YTD":
-
-    cutoff = pd.Timestamp(year=today.year-4, month=1, day=1)
-
-else:
-
-    cutoff = df["date"].min()
-
-df = df[df["date"] >= cutoff]
-df = df[df["type"].isin(selected_sports)]
-
-# -------------------------
+# -----------------------------------------------------
 # KPIs
-# -------------------------
+# -----------------------------------------------------
 
-total_km = df["km"].sum()
-total_hours = df["hours"].sum()
-sessions = len(df)
+current_week = weekly.iloc[-1]["hours"]
+rolling_4 = weekly.iloc[-1]["rolling4"]
 
-col1, col2, col3 = st.columns(3)
+# Fitness model
+weekly["fitness"] = weekly["hours"].ewm(span=42).mean()
+weekly["fatigue"] = weekly["hours"].ewm(span=7).mean()
+weekly["form"] = weekly["fitness"] - weekly["fatigue"]
 
-col1.metric("Total Distance (km)", f"{total_km:,.0f}")
-col2.metric("Total Hours", f"{total_hours:,.0f}")
-col3.metric("Sessions", f"{sessions:,}")
+ctl = weekly.iloc[-1]["fitness"]
+atl = weekly.iloc[-1]["fatigue"]
 
-st.divider()
+k1, k2, k3, k4 = st.columns(4)
 
-# -------------------------
-# WEEKLY AGGREGATION
-# -------------------------
+k1.metric("This week", f"{current_week:.1f} h")
+k2.metric("4 week avg", f"{rolling_4:.1f} h")
+k3.metric("Fitness (CTL)", f"{ctl:.0f}")
+k4.metric("Fatigue (ATL)", f"{atl:.0f}")
 
-weekly_full = df_original.groupby("week").agg({
-    "hours":"sum",
-    "km":"sum"
-}).reset_index()
-
-weekly_full = weekly_full.sort_values("week")
-
-# rolling promedio
-weekly_full["rolling"] = weekly_full["hours"].rolling(4).mean()
-
-# FITNESS / FATIGUE MODEL
-weekly_full["ATL"] = weekly_full["hours"].ewm(span=7, adjust=False).mean()
-weekly_full["CTL"] = weekly_full["hours"].ewm(span=42, adjust=False).mean()
-
-weekly_full["TSB"] = weekly_full["CTL"] - weekly_full["ATL"]
-
-# aplicar filtro
-weekly = weekly_full[weekly_full["week"] >= cutoff]
-
-# -------------------------
-# RECORD WEEK
-# -------------------------
-
-record_hours = weekly["hours"].max()
-
-# -------------------------
-# TARGET
-# -------------------------
-
-target = st.sidebar.slider(
-    "Weekly target hours",
-    min_value=2,
-    max_value=20,
-    value=8
-)
-
-# -------------------------
+# -----------------------------------------------------
 # WEEKLY LOAD CHART
-# -------------------------
+# -----------------------------------------------------
 
-colors = []
+st.subheader("Weekly Training Load")
 
-for h in weekly["hours"]:
-
-    if h == record_hours:
-        colors.append("#f59e0b")
-
-    elif h < target:
-        colors.append("#ef4444")
-
-    else:
-        colors.append("#3b82f6")
+colors = np.where(weekly["hours"] < 7.5, "red", "#4A7DFF")
 
 fig = go.Figure()
 
@@ -176,49 +139,52 @@ fig.add_trace(
     go.Bar(
         x=weekly["week"],
         y=weekly["hours"],
-        marker_color=colors,
-        name="Weekly hours"
+        name="Weekly hours",
+        marker_color=colors
     )
 )
 
 fig.add_trace(
     go.Scatter(
         x=weekly["week"],
-        y=weekly["rolling"],
-        mode="lines",
-        line=dict(width=3),
-        name="4 week avg"
+        y=weekly["rolling4"],
+        name="4 week avg",
+        line=dict(width=3)
     )
 )
 
 fig.add_hline(
-    y=target,
+    y=7.5,
     line_dash="dash",
     line_color="green",
     annotation_text="target"
 )
 
-record_row = weekly.loc[weekly["hours"].idxmax()]
-
 fig.add_annotation(
-    x=record_row["week"],
-    y=record_row["hours"],
-    text=f"⭐ {record_row['hours']:.1f}h record",
+    x=record_week["week"],
+    y=record_week["hours"],
+    text=f"⭐ {record_week['hours']:.1f}h record",
     showarrow=True
 )
 
 fig.update_layout(
-    title="Weekly Training Load",
+    height=350,
+    legend=dict(
+        orientation="h",
+        yanchor="bottom",
+        y=1.02,
+        xanchor="center",
+        x=0.5
+    ),
     xaxis_title="Week",
-    yaxis_title="Hours",
-    height=450
+    yaxis_title="Hours"
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
-# -------------------------
-# FITNESS / FATIGUE CHART
-# -------------------------
+# -----------------------------------------------------
+# FITNESS FATIGUE MODEL
+# -----------------------------------------------------
 
 st.subheader("Fitness / Fatigue Model")
 
@@ -227,8 +193,8 @@ fig2 = go.Figure()
 fig2.add_trace(
     go.Scatter(
         x=weekly["week"],
-        y=weekly["CTL"],
-        name="Fitness (CTL)",
+        y=weekly["fitness"],
+        name="Fitness",
         line=dict(width=3)
     )
 )
@@ -236,8 +202,8 @@ fig2.add_trace(
 fig2.add_trace(
     go.Scatter(
         x=weekly["week"],
-        y=weekly["ATL"],
-        name="Fatigue (ATL)",
+        y=weekly["fatigue"],
+        name="Fatigue",
         line=dict(width=3)
     )
 )
@@ -245,233 +211,120 @@ fig2.add_trace(
 fig2.add_trace(
     go.Scatter(
         x=weekly["week"],
-        y=weekly["TSB"],
-        name="Form (TSB)",
-        line=dict(width=2, dash="dot")
+        y=weekly["form"],
+        name="Form",
+        line=dict(dash="dot")
     )
 )
 
 fig2.update_layout(
-    height=400,
-    xaxis_title="Week",
-    yaxis_title="Load"
+    height=350,
+    legend=dict(
+        orientation="h",
+        y=1.02,
+        x=0.5,
+        xanchor="center"
+    )
 )
 
 st.plotly_chart(fig2, use_container_width=True)
 
-# -------------------------
-# DISTANCE BY SPORT
-# -------------------------
-
-sport_dist = df.groupby("type")["km"].sum().reset_index()
-
-sport_dist = sport_dist.sort_values("km", ascending=False)
-
-fig3 = px.pie(
-    sport_dist,
-    names="type",
-    values="km",
-    title="Distance by Sport"
-)
-
-st.plotly_chart(fig3, use_container_width=True)
-
-# -------------------------
-# ACTIVITY TABLE
-# -------------------------
-
-st.subheader("Activities")
-
-table = df[[
-    "date",
-    "name",
-    "type",
-    "km",
-    "hours"
-]].sort_values("date", ascending=False)
-
-table["km"] = table["km"].round(2)
-table["hours"] = table["hours"].round(2)
-
-st.dataframe(table, use_container_width=True)
-# =========================================================
-# PERFORMANCE MODULE (final clean version)
-# =========================================================
-
-import json
-
-st.divider()
-st.header("🏆 Performance Records")
-
-@st.cache_data
-def extract_metrics(df_in):
-
-    rows = []
-
-    for _, r in df_in.iterrows():
-
-        raw = r.get("raw_json")
-
-        if not raw:
-            continue
-
-        try:
-
-            j = json.loads(raw)
-
-            place = j.get("location_city")
-
-            # fallback si Strava no devuelve ciudad
-            if not place:
-                place = r.get("name")
-
-            rows.append({
-                "date": r["date"],
-                "place": place,
-                "type": r["type"],
-                "distance": j.get("distance"),
-                "moving_time": j.get("moving_time"),
-                "avg_hr": j.get("average_heartrate"),
-                "max_hr": j.get("max_heartrate"),
-                "avg_watts": j.get("average_watts"),
-                "max_watts": j.get("max_watts")
-            })
-
-        except:
-            continue
-
-    dfm = pd.DataFrame(rows)
-
-    if len(dfm):
-
-        dfm["km"] = dfm["distance"] / 1000
-        dfm["pace"] = dfm["moving_time"] / dfm["km"]
-
-    return dfm
-
-
-metrics = extract_metrics(df)
-
-# =========================================================
+# -----------------------------------------------------
 # RUNNING PRs
-# =========================================================
+# -----------------------------------------------------
 
-st.subheader("🏃 Running PRs")
+run = df[df["type"].str.contains("Run", na=False)].copy()
 
-run_types = ["Run", "TrailRun"]
+run["pace"] = run["moving_time"] / run["distance"]
 
-runs = metrics[metrics["type"].isin(run_types)]
+def pace_str(p):
+
+    pace_sec = p * 1000
+    m = int(pace_sec // 60)
+    s = int(pace_sec % 60)
+
+    return f"{m}:{s:02d} /km"
+
 
 records = []
 
-targets = {
-    "1 km": (0.9,1.2),
-    "5 km": (4.8,5.3),
-    "10 km": (9.5,10.5),
-    "21 km": (20,22)
+distances = {
+    "1 km": 1,
+    "5 km": 5,
+    "10 km": 10,
+    "21 km": 21
 }
 
-for label,(low,high) in targets.items():
+for label, dist in distances.items():
 
-    subset = runs[(runs["km"] > low) & (runs["km"] < high)]
+    subset = run[run["km"] >= dist]
 
-    if len(subset)==0:
-        continue
+    if len(subset) > 0:
 
-    best = subset.loc[subset["pace"].idxmin()]
+        best = subset.loc[subset["pace"].idxmin()]
 
-    pace = best["pace"]
+        records.append({
+            "Distance": label,
+            "Best pace": pace_str(best["pace"]),
+            "Date": best["date"].date(),
+            "Location": best["location"]
+        })
 
-    pace_str = f"{int(pace//60)}:{int(pace%60):02d} /km"
+running_pr = pd.DataFrame(records)
 
-    records.append({
-        "Distance":label,
-        "Best pace":pace_str,
-        "Date":best["date"].date(),
-        "Location":best["place"]
-    })
+# -----------------------------------------------------
+# POWER RECORDS
+# -----------------------------------------------------
 
-records_df = pd.DataFrame(records)
+bike = df[df["type"].str.contains("Ride", na=False)]
 
-if len(records_df):
+power_records = pd.DataFrame([
+    {
+        "Metric": "Max Power",
+        "Value": f"{bike['max_watts'].max():.0f} W",
+        "Date": bike.loc[bike["max_watts"].idxmax()]["date"].date(),
+        "Location": bike.loc[bike["max_watts"].idxmax()]["location"]
+    },
+    {
+        "Metric": "Best Avg Power",
+        "Value": f"{bike['average_watts'].max():.0f} W",
+        "Date": bike.loc[bike["average_watts"].idxmax()]["date"].date(),
+        "Location": bike.loc[bike["average_watts"].idxmax()]["location"]
+    }
+])
 
-    st.dataframe(records_df, use_container_width=True)
+# -----------------------------------------------------
+# HR RECORDS
+# -----------------------------------------------------
 
-else:
+hr_records = pd.DataFrame([
+    {
+        "Metric": "Max Heart Rate",
+        "Value": f"{df['max_heartrate'].max():.0f} bpm",
+        "Date": df.loc[df["max_heartrate"].idxmax()]["date"].date(),
+        "Location": df.loc[df["max_heartrate"].idxmax()]["location"]
+    },
+    {
+        "Metric": "Highest Avg Heart Rate",
+        "Value": f"{df['average_heartrate'].max():.0f} bpm",
+        "Date": df.loc[df["average_heartrate"].idxmax()]["date"].date(),
+        "Location": df.loc[df["average_heartrate"].idxmax()]["location"]
+    }
+])
 
-    st.info("No running PRs found.")
+# -----------------------------------------------------
+# RECORDS SECTION
+# -----------------------------------------------------
 
-# =========================================================
-# CYCLING POWER
-# =========================================================
+st.subheader("Performance Records")
 
-st.subheader("⚡ Cycling Power Records")
+tab1, tab2, tab3 = st.tabs(["🏃 Running", "⚡ Power", "❤️ Heart rate"])
 
-bike_types = ["Ride","VirtualRide"]
+with tab1:
+    st.dataframe(running_pr, use_container_width=True)
 
-power = metrics[metrics["type"].isin(bike_types)]
+with tab2:
+    st.dataframe(power_records, use_container_width=True)
 
-power = power.dropna(subset=["avg_watts","max_watts"])
-
-if len(power):
-
-    best_max = power.loc[power["max_watts"].idxmax()]
-    best_avg = power.loc[power["avg_watts"].idxmax()]
-
-    power_table = pd.DataFrame([
-        {
-            "Metric":"Max Power",
-            "Value":f"{int(best_max['max_watts'])} W",
-            "Date":best_max["date"].date(),
-            "Location":best_max["place"]
-        },
-        {
-            "Metric":"Best Avg Power",
-            "Value":f"{int(best_avg['avg_watts'])} W",
-            "Date":best_avg["date"].date(),
-            "Location":best_avg["place"]
-        }
-    ])
-
-    st.dataframe(power_table, use_container_width=True)
-
-else:
-
-    st.info("No cycling power data available.")
-
-# =========================================================
-# HEART RATE
-# =========================================================
-
-st.subheader("❤️ Heart Rate Records")
-
-hr = metrics.dropna(subset=["avg_hr","max_hr"])
-
-# filtro fisiológico básico
-hr = hr[(hr["max_hr"] < 210) & (hr["max_hr"] > 40)]
-
-if len(hr):
-
-    best_max = hr.loc[hr["max_hr"].idxmax()]
-    best_avg = hr.loc[hr["avg_hr"].idxmax()]
-
-    hr_table = pd.DataFrame([
-        {
-            "Metric":"Max Heart Rate",
-            "Value":f"{int(best_max['max_hr'])} bpm",
-            "Date":best_max["date"].date(),
-            "Location":best_max["place"]
-        },
-        {
-            "Metric":"Highest Avg Heart Rate",
-            "Value":f"{int(best_avg['avg_hr'])} bpm",
-            "Date":best_avg["date"].date(),
-            "Location":best_avg["place"]
-        }
-    ])
-
-    st.dataframe(hr_table, use_container_width=True)
-
-else:
-
-    st.info("No heart rate data available.")
+with tab3:
+    st.dataframe(hr_records, use_container_width=True)
