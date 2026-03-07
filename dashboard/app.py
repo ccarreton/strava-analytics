@@ -58,17 +58,25 @@ if df.empty:
 # PARSE RAW JSON
 # -------------------------
 
-if "raw_json" in df.columns:
+def parse_raw(row):
 
-    parsed = df["raw_json"].apply(
-        lambda x: json.loads(x) if pd.notnull(x) else {}
-    )
+    if not isinstance(row, str):
+        return {}
 
-    df["max_watts"] = parsed.apply(lambda x: x.get("max_watts"))
-    df["average_watts"] = parsed.apply(lambda x: x.get("average_watts"))
+    try:
+        return json.loads(row)
+    except:
+        return {}
 
-    df["max_heartrate"] = parsed.apply(lambda x: x.get("max_heartrate"))
-    df["average_heartrate"] = parsed.apply(lambda x: x.get("average_heartrate"))
+parsed = df["raw_json"].apply(parse_raw)
+
+df["max_watts"] = parsed.apply(lambda x: x.get("max_watts"))
+df["avg_watts"] = parsed.apply(
+    lambda x: x.get("average_watts") or x.get("weighted_average_watts")
+)
+
+df["max_hr"] = parsed.apply(lambda x: x.get("max_heartrate"))
+df["avg_hr"] = parsed.apply(lambda x: x.get("average_heartrate"))
 
 
 st.caption(f"{len(df)} activities loaded")
@@ -87,7 +95,6 @@ weekly = (
 if weekly.empty:
     st.warning("No weekly data available.")
     st.stop()
-
 
 weekly["rolling"] = weekly["hours"].rolling(
     ROLLING_WINDOW,
@@ -215,7 +222,11 @@ load_diff = (
     (current_week - rolling) / rolling * 100
 ) if rolling > 0 else 0
 
-trend = "increasing 📈" if weekly["fitness"].iloc[-1] > weekly["fitness"].iloc[-2] else "stable"
+trend = (
+    "increasing 📈"
+    if weekly["fitness"].iloc[-1] > weekly["fitness"].iloc[-2]
+    else "stable"
+)
 
 st.markdown(f"""
 **Training load:** {current_week:.1f} hours  
@@ -240,6 +251,7 @@ if not runs.empty:
     def best(distance_km):
 
         target = distance_km * 1000
+
         subset = runs[runs["distance"] >= target]
 
         if subset.empty:
@@ -259,7 +271,7 @@ if not runs.empty:
             "Location": best["location"]
         }
 
-    prs = [best(d) for d in [1,5,10,21]]
+    prs = [best(d) for d in [1, 5, 10, 21]]
     prs = [p for p in prs if p]
 
     if prs:
@@ -276,27 +288,29 @@ bike = df[df["type"] == "Ride"].copy()
 
 records = []
 
-if "max_watts" in bike.columns and bike["max_watts"].notna().any():
+if not bike.empty:
 
-    row = bike.loc[bike["max_watts"].idxmax()]
+    if bike["max_watts"].notna().any():
 
-    records.append({
-        "Metric": "Max Power",
-        "Value": f"{int(row['max_watts'])} W",
-        "Date": row["date"].date(),
-        "Location": row["location"]
-    })
+        row = bike.loc[bike["max_watts"].idxmax()]
 
-if "average_watts" in bike.columns and bike["average_watts"].notna().any():
+        records.append({
+            "Metric": "Max Power",
+            "Value": f"{int(row['max_watts'])} W",
+            "Date": row["date"].date(),
+            "Location": row["location"]
+        })
 
-    row = bike.loc[bike["average_watts"].idxmax()]
+    if bike["avg_watts"].notna().any():
 
-    records.append({
-        "Metric": "Best Avg Power",
-        "Value": f"{int(row['average_watts'])} W",
-        "Date": row["date"].date(),
-        "Location": row["location"]
-    })
+        row = bike.loc[bike["avg_watts"].idxmax()]
+
+        records.append({
+            "Metric": "Best Avg Power",
+            "Value": f"{int(row['avg_watts'])} W",
+            "Date": row["date"].date(),
+            "Location": row["location"]
+        })
 
 if records:
     st.dataframe(pd.DataFrame(records), use_container_width=True)
@@ -308,28 +322,26 @@ if records:
 
 st.subheader("❤️ Heart Rate Records")
 
-hr = df.copy()
-
 records = []
 
-if "max_heartrate" in hr.columns and hr["max_heartrate"].notna().any():
+if df["max_hr"].notna().any():
 
-    row = hr.loc[hr["max_heartrate"].idxmax()]
+    row = df.loc[df["max_hr"].idxmax()]
 
     records.append({
         "Metric": "Max Heart Rate",
-        "Value": f"{int(row['max_heartrate'])} bpm",
+        "Value": f"{int(row['max_hr'])} bpm",
         "Date": row["date"].date(),
         "Location": row["location"]
     })
 
-if "average_heartrate" in hr.columns and hr["average_heartrate"].notna().any():
+if df["avg_hr"].notna().any():
 
-    row = hr.loc[hr["average_heartrate"].idxmax()]
+    row = df.loc[df["avg_hr"].idxmax()]
 
     records.append({
         "Metric": "Highest Avg HR",
-        "Value": f"{int(row['average_heartrate'])} bpm",
+        "Value": f"{int(row['avg_hr'])} bpm",
         "Date": row["date"].date(),
         "Location": row["location"]
     })
