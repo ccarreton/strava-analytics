@@ -214,3 +214,121 @@ st.plotly_chart(
     use_container_width=True,
     config={"displayModeBar": False}
 )
+
+# -------------------------
+# WEEKLY INSIGHT
+# -------------------------
+
+st.subheader("💡 Weekly Insight")
+
+current_week = latest["hours"]
+rolling_avg = latest["rolling"]
+
+sessions_week = df[df["week"] == latest["week"]].shape[0]
+
+load_diff = ((current_week - rolling_avg) / rolling_avg) * 100 if rolling_avg > 0 else 0
+
+trend = "increasing 📈" if weekly["fitness"].iloc[-1] > weekly["fitness"].iloc[-2] else "stable"
+
+st.markdown(f"""
+**Training load:** {current_week:.1f} hours  
+**vs 4-week average:** {load_diff:+.0f}%  
+**Sessions this week:** {sessions_week}  
+**Fitness trend:** {trend}
+""")
+st.subheader("🏃 Running PRs")
+
+runs = df[df["type"] == "Run"].copy()
+
+if not runs.empty:
+
+    runs["pace"] = runs["moving_time"] / runs["distance"]
+
+    def best(distance_km):
+
+        target = distance_km * 1000
+        subset = runs[runs["distance"] >= target]
+
+        if subset.empty:
+            return None
+
+        best = subset.sort_values("pace").iloc[0]
+
+        pace = best["pace"] / 60
+        minutes = int(pace)
+        seconds = int((pace - minutes) * 60)
+
+        return {
+            "Distance": f"{distance_km} km",
+            "Best pace": f"{minutes}:{seconds:02d}/km",
+            "Date": best["date"].date(),
+            "Location": best["location"]
+        }
+
+    prs = [best(d) for d in [1,5,10,21]]
+    prs = [p for p in prs if p]
+
+    if prs:
+        st.dataframe(pd.DataFrame(prs), use_container_width=True)
+
+st.subheader("⚡ Cycling Power Records")
+
+bike = df[df["type"] == "Ride"]
+
+records = []
+
+if "max_watts" in bike.columns and not bike["max_watts"].isna().all():
+
+    row = bike.loc[bike["max_watts"].idxmax()]
+
+    records.append({
+        "Metric":"Max Power",
+        "Value":f"{row['max_watts']} W",
+        "Date":row["date"].date(),
+        "Location":row["location"]
+    })
+
+if "average_watts" in bike.columns and not bike["average_watts"].isna().all():
+
+    row = bike.loc[bike["average_watts"].idxmax()]
+
+    records.append({
+        "Metric":"Best Avg Power",
+        "Value":f"{row['average_watts']} W",
+        "Date":row["date"].date(),
+        "Location":row["location"]
+    })
+
+if records:
+    st.dataframe(pd.DataFrame(records), use_container_width=True)
+
+st.subheader("❤️ Heart Rate Records")
+
+hr = df.copy()
+
+records = []
+
+if "max_heartrate" in hr.columns and not hr["max_heartrate"].isna().all():
+
+    row = hr.loc[hr["max_heartrate"].idxmax()]
+
+    records.append({
+        "Metric":"Max Heart Rate",
+        "Value":f"{row['max_heartrate']} bpm",
+        "Date":row["date"].date(),
+        "Location":row["location"]
+    })
+
+if "average_heartrate" in hr.columns and not hr["average_heartrate"].isna().all():
+
+    row = hr.loc[hr["average_heartrate"].idxmax()]
+
+    records.append({
+        "Metric":"Highest Avg HR",
+        "Value":f"{row['average_heartrate']} bpm",
+        "Date":row["date"].date(),
+        "Location":row["location"]
+    })
+
+if records:
+    st.dataframe(pd.DataFrame(records), use_container_width=True)
