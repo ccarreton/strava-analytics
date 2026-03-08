@@ -10,9 +10,9 @@ CLIENT_SECRET = os.getenv("STRAVA_CLIENT_SECRET")
 REFRESH_TOKEN = os.getenv("STRAVA_REFRESH_TOKEN")
 
 
-# ---------------------------
-# Obtener access token
-# ---------------------------
+# -----------------------------------
+# AUTH
+# -----------------------------------
 
 def get_access_token():
 
@@ -29,14 +29,14 @@ def get_access_token():
     tokens = r.json()
 
     if "access_token" not in tokens:
-        raise Exception(f"Token error: {tokens}")
+        raise Exception(tokens)
 
     return tokens["access_token"]
 
 
-# ---------------------------
-# Descargar actividades
-# ---------------------------
+# -----------------------------------
+# ACTIVITIES
+# -----------------------------------
 
 def get_activities(headers):
 
@@ -46,44 +46,18 @@ def get_activities(headers):
         params={"per_page": 30}
     )
 
-    if r.status_code != 200:
-        raise Exception(r.text)
-
     return r.json()
 
 
-# ---------------------------
-# Filtrar últimos 14 días
-# ---------------------------
-
-def filter_last_14_days(activities):
-
-    cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=14)
-
-    filtered = []
-
-    for act in activities:
-
-        start = dt.datetime.fromisoformat(
-            act["start_date"].replace("Z","+00:00")
-        )
-
-        if start >= cutoff:
-            filtered.append(act)
-
-    return filtered
-
-
-# ---------------------------
-# Obtener streams
-# ---------------------------
+# -----------------------------------
+# STREAMS
+# -----------------------------------
 
 def get_streams(activity_id, headers):
 
-    stream_keys = [
+    keys = [
         "time",
         "distance",
-        "latlng",
         "velocity_smooth",
         "heartrate",
         "cadence",
@@ -96,94 +70,161 @@ def get_streams(activity_id, headers):
         f"{BASE_URL}/activities/{activity_id}/streams",
         headers=headers,
         params={
-            "keys": ",".join(stream_keys),
+            "keys": ",".join(keys),
             "key_by_type": "true"
         }
     )
 
     if r.status_code != 200:
-        print("Error streams:", r.text)
         return None
 
     return r.json()
 
 
-# ---------------------------
-# Convertir streams a dataframe
-# ---------------------------
+# -----------------------------------
+# DATAFRAME
+# -----------------------------------
 
 def streams_to_dataframe(streams):
 
     data = {}
 
-    for key in streams:
-
-        data[key] = streams[key]["data"]
+    for k in streams:
+        data[k] = streams[k]["data"]
 
     df = pd.DataFrame(data)
 
-    # métricas derivadas
-
     if "velocity_smooth" in df:
-        df["pace_min_km"] = (1000 / df["velocity_smooth"]) / 60
 
-    if "distance" in df:
-        df["km"] = (df["distance"] // 1000) + 1
+        df["pace_min_km"] = (1000 / df["velocity_smooth"]) / 60
 
     return df
 
 
-# ---------------------------
+# -----------------------------------
+# DISTRIBUTION
+# -----------------------------------
+
+def compute_distribution(series, rounding=2):
+
+    series = series.replace([float("inf")], None).dropna()
+
+    dist = series.round(rounding).value_counts().sort_index()
+
+    return dist
+
+
+def format_pace(value):
+
+    minutes = int(value)
+    seconds = int((value - minutes) * 60)
+
+    return f"{minutes}:{seconds:02d}"
+
+
+# -----------------------------------
+# ANALYSIS
+# -----------------------------------
+
+def analyze_activity(df):
+
+    results = {}
+
+    if "pace_min_km" in df:
+
+        pace_dist = compute_distribution(df["pace_min_km"])
+
+        results["pace"] = pace_dist
+
+    if "watts" in df:
+
+        power_dist = compute_distribution(df["watts"],0)
+
+        results["power"] = power_dist
+
+    if "heartrate" in df:
+
+        hr_dist = compute_distribution(df["heartrate"],0)
+
+        results["hr"] = hr_dist
+
+    return results
+
+
+# -----------------------------------
 # MAIN
-# ---------------------------
+# -----------------------------------
 
 def main():
 
-    print("Refreshing token...")
+    print("Refreshing token")
 
     access_token = get_access_token()
 
-    headers = {
-        "Authorization": f"Bearer {access_token}"
-    }
-
-    print("Descargando actividades...")
+    headers = {"Authorization": f"Bearer {access_token}"}
 
     activities = get_activities(headers)
 
-    print("Actividades descargadas:", len(activities))
+    cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=14)
 
-    recent = filter_last_14_days(activities)
+    for act in activities:
 
-    print("Actividades últimos 14 días:", len(recent))
+        start = dt.datetime.fromisoformat(
+            act["start_date"].replace("Z","+00:00")
+        )
 
-    for act in recent:
+        if start < cutoff:
+            continue
 
-        print("\n----------------------------------")
-        print("Actividad:", act["name"])
-        print("Tipo:", act["type"])
-        print("Distancia:", round(act["distance"]/1000,2),"km")
+        print("\n============================")
+        print(act["name"], act["type"])
 
         streams = get_streams(act["id"], headers)
 
         if not streams:
             continue
 
-        print("Streams disponibles:", list(streams.keys()))
-
         df = streams_to_dataframe(streams)
 
-        print("Puntos registrados:", len(df))
+        print("points:", len(df))
 
-        print(df.head())
+        results = analyze_activity(df)
 
-        # guardar CSV para análisis
+        # ---------------------
+        # PRINT RESULTS
+        # ---------------------
 
-        filename = f"streams_{act['id']}.csv"
+        if "pace" in results:
 
-        df.to_csv(filename, index=False)
+            print("\nPACE DISTRIBUTION (top 10)")
 
-        print("Guardado:", filename)
+            top = results["pace"].sort_values(ascending=False).head(10)
+
+            for pace,sec in top.items():
+
+                print(format_pace(pace), sec,"sec")
+
+
+        if "power" in results:
+
+            print("\nPOWER DISTRIBUTION (top 10)")
+
+            top = results["power"].sort_values(ascending=False).head(10)
+
+            for watts,sec in top.items():
+
+                print(watts,"W →",sec,"sec")
+
+
+        if "hr" in results:
+
+            print("\nHR DISTRIBUTION (top 10)")
+
+            top = results["hr"].sort_values(ascending=False).head(10)
+
+            for hr,sec in top.items():
+
+                print(hr,"bpm →",sec,"sec")
 
 
 if __name__ == "__main__":
