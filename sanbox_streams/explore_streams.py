@@ -9,10 +9,12 @@ CLIENT_ID = os.getenv("STRAVA_CLIENT_ID")
 CLIENT_SECRET = os.getenv("STRAVA_CLIENT_SECRET")
 REFRESH_TOKEN = os.getenv("STRAVA_REFRESH_TOKEN")
 
+EFFORT_WINDOWS = [5,30,60,300,600,1200]
 
-# -----------------------------------
+
+# --------------------------
 # AUTH
-# -----------------------------------
+# --------------------------
 
 def get_access_token():
 
@@ -34,24 +36,24 @@ def get_access_token():
     return tokens["access_token"]
 
 
-# -----------------------------------
+# --------------------------
 # ACTIVITIES
-# -----------------------------------
+# --------------------------
 
 def get_activities(headers):
 
     r = requests.get(
         f"{BASE_URL}/athlete/activities",
         headers=headers,
-        params={"per_page": 30}
+        params={"per_page":30}
     )
 
     return r.json()
 
 
-# -----------------------------------
+# --------------------------
 # STREAMS
-# -----------------------------------
+# --------------------------
 
 def get_streams(activity_id, headers):
 
@@ -70,8 +72,8 @@ def get_streams(activity_id, headers):
         f"{BASE_URL}/activities/{activity_id}/streams",
         headers=headers,
         params={
-            "keys": ",".join(keys),
-            "key_by_type": "true"
+            "keys":",".join(keys),
+            "key_by_type":"true"
         }
     )
 
@@ -81,9 +83,9 @@ def get_streams(activity_id, headers):
     return r.json()
 
 
-# -----------------------------------
+# --------------------------
 # DATAFRAME
-# -----------------------------------
+# --------------------------
 
 def streams_to_dataframe(streams):
 
@@ -95,65 +97,52 @@ def streams_to_dataframe(streams):
     df = pd.DataFrame(data)
 
     if "velocity_smooth" in df:
-
-        df["pace_min_km"] = (1000 / df["velocity_smooth"]) / 60
+        df["pace_min_km"] = (1000/df["velocity_smooth"])/60
 
     return df
 
 
-# -----------------------------------
+# --------------------------
 # DISTRIBUTION
-# -----------------------------------
+# --------------------------
 
 def compute_distribution(series, rounding=2):
 
-    series = series.replace([float("inf")], None).dropna()
+    series = series.replace([float("inf")],None).dropna()
 
-    dist = series.round(rounding).value_counts().sort_index()
+    return series.round(rounding).value_counts().sort_index()
 
-    return dist
+
+# --------------------------
+# BEST EFFORTS
+# --------------------------
+
+def best_efforts(series, durations):
+
+    results = {}
+
+    for d in durations:
+
+        rolling = series.rolling(d).mean()
+
+        best = rolling.max()
+
+        results[d] = best
+
+    return results
 
 
 def format_pace(value):
 
     minutes = int(value)
-    seconds = int((value - minutes) * 60)
+    seconds = int((value-minutes)*60)
 
     return f"{minutes}:{seconds:02d}"
 
 
-# -----------------------------------
-# ANALYSIS
-# -----------------------------------
-
-def analyze_activity(df):
-
-    results = {}
-
-    if "pace_min_km" in df:
-
-        pace_dist = compute_distribution(df["pace_min_km"])
-
-        results["pace"] = pace_dist
-
-    if "watts" in df:
-
-        power_dist = compute_distribution(df["watts"],0)
-
-        results["power"] = power_dist
-
-    if "heartrate" in df:
-
-        hr_dist = compute_distribution(df["heartrate"],0)
-
-        results["hr"] = hr_dist
-
-    return results
-
-
-# -----------------------------------
+# --------------------------
 # MAIN
-# -----------------------------------
+# --------------------------
 
 def main():
 
@@ -161,7 +150,7 @@ def main():
 
     access_token = get_access_token()
 
-    headers = {"Authorization": f"Bearer {access_token}"}
+    headers = {"Authorization":f"Bearer {access_token}"}
 
     activities = get_activities(headers)
 
@@ -176,55 +165,84 @@ def main():
         if start < cutoff:
             continue
 
-        print("\n============================")
-        print(act["name"], act["type"])
+        print("\n==============================")
+        print(act["name"],"|",act["type"])
+        print("distance:",round(act["distance"]/1000,2),"km")
 
-        streams = get_streams(act["id"], headers)
+        streams = get_streams(act["id"],headers)
 
         if not streams:
             continue
 
         df = streams_to_dataframe(streams)
 
-        print("points:", len(df))
+        print("points:",len(df))
 
-        results = analyze_activity(df)
+        # ------------------
+        # DISTRIBUTIONS
+        # ------------------
 
-        # ---------------------
-        # PRINT RESULTS
-        # ---------------------
-
-        if "pace" in results:
+        if "pace_min_km" in df:
 
             print("\nPACE DISTRIBUTION (top 10)")
 
-            top = results["pace"].sort_values(ascending=False).head(10)
+            dist = compute_distribution(df["pace_min_km"])
+
+            top = dist.sort_values(ascending=False).head(10)
 
             for pace,sec in top.items():
+                print(format_pace(pace),"→",sec,"sec")
 
-                print(format_pace(pace), sec,"sec")
 
-
-        if "power" in results:
+        if "watts" in df:
 
             print("\nPOWER DISTRIBUTION (top 10)")
 
-            top = results["power"].sort_values(ascending=False).head(10)
+            dist = compute_distribution(df["watts"],0)
 
-            for watts,sec in top.items():
+            top = dist.sort_values(ascending=False).head(10)
 
-                print(watts,"W →",sec,"sec")
+            for w,sec in top.items():
+                print(int(w),"W →",sec,"sec")
 
 
-        if "hr" in results:
+        if "heartrate" in df:
 
             print("\nHR DISTRIBUTION (top 10)")
 
-            top = results["hr"].sort_values(ascending=False).head(10)
+            dist = compute_distribution(df["heartrate"],0)
+
+            top = dist.sort_values(ascending=False).head(10)
 
             for hr,sec in top.items():
+                print(int(hr),"bpm →",sec,"sec")
 
-                print(hr,"bpm →",sec,"sec")
+
+        # ------------------
+        # BEST EFFORTS
+        # ------------------
+
+        if "watts" in df:
+
+            efforts = best_efforts(df["watts"],EFFORT_WINDOWS)
+
+            print("\nBEST POWER EFFORTS")
+
+            for d,v in efforts.items():
+                print(d,"sec →",round(v,1),"W")
+
+
+        if "velocity_smooth" in df:
+
+            efforts = best_efforts(df["velocity_smooth"],EFFORT_WINDOWS)
+
+            print("\nBEST SPEED EFFORTS")
+
+            for d,v in efforts.items():
+
+                pace = (1000/v)/60
+
+                print(d,"sec →",format_pace(pace),"/km")
 
 
 if __name__ == "__main__":
