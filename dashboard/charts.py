@@ -12,13 +12,13 @@ def weekly_chart(weekly, achievements=None):
 
     for i in range(len(weekly)):
         if i == best_week_index:
-            colors.append("#FFD700")  # gold
+            colors.append("#FFD700")
         else:
             colors.append("#3B82F6")
 
     fig = go.Figure()
 
-    # weekly bars
+    # Weekly load bars
     fig.add_trace(
         go.Bar(
             x=weekly["week"],
@@ -28,7 +28,7 @@ def weekly_chart(weekly, achievements=None):
         )
     )
 
-    # rolling average
+    # Rolling avg
     fig.add_trace(
         go.Scatter(
             x=weekly["week"],
@@ -38,7 +38,7 @@ def weekly_chart(weekly, achievements=None):
         )
     )
 
-    # target
+    # Target line
     fig.add_trace(
         go.Scatter(
             x=weekly["week"],
@@ -48,17 +48,17 @@ def weekly_chart(weekly, achievements=None):
         )
     )
 
-    # best week label
+    # Best week label
     best_week = weekly.loc[best_week_index]
 
     fig.add_annotation(
         x=best_week["week"],
         y=best_week["hours"] + 0.7,
-        text="⭐ record",
+        text="⭐",
         showarrow=False
     )
 
-    # achievements markers
+    # Achievements markers
 
     for week, medals in achievements.items():
 
@@ -74,14 +74,13 @@ def weekly_chart(weekly, achievements=None):
             fig.add_trace(
                 go.Scatter(
                     x=[week],
-                    y=[y + 0.4],
+                    y=[y + 0.5],
                     mode="markers",
                     marker=dict(
                         size=12,
                         color="#16A34A",
                         symbol="circle"
                     ),
-                    name="Running PR",
                     showlegend=False
                 )
             )
@@ -91,14 +90,13 @@ def weekly_chart(weekly, achievements=None):
             fig.add_trace(
                 go.Scatter(
                     x=[week],
-                    y=[y + 0.8],
+                    y=[y + 0.9],
                     mode="markers",
                     marker=dict(
                         size=12,
                         color="#F97316",
                         symbol="diamond"
                     ),
-                    name="Power peak",
                     showlegend=False
                 )
             )
@@ -108,14 +106,13 @@ def weekly_chart(weekly, achievements=None):
             fig.add_trace(
                 go.Scatter(
                     x=[week],
-                    y=[y + 1.2],
+                    y=[y + 1.3],
                     mode="markers",
                     marker=dict(
                         size=12,
                         color="#DC2626",
-                        symbol="heart"
+                        symbol="x"
                     ),
-                    name="HR peak",
                     showlegend=False
                 )
             )
