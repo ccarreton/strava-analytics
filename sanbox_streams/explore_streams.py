@@ -12,9 +12,9 @@ REFRESH_TOKEN = os.getenv("STRAVA_REFRESH_TOKEN")
 EFFORT_WINDOWS = [5,30,60,300,600,1200]
 
 
-# --------------------------
+# -----------------------
 # AUTH
-# --------------------------
+# -----------------------
 
 def get_access_token():
 
@@ -36,9 +36,9 @@ def get_access_token():
     return tokens["access_token"]
 
 
-# --------------------------
+# -----------------------
 # ACTIVITIES
-# --------------------------
+# -----------------------
 
 def get_activities(headers):
 
@@ -51,9 +51,9 @@ def get_activities(headers):
     return r.json()
 
 
-# --------------------------
+# -----------------------
 # STREAMS
-# --------------------------
+# -----------------------
 
 def get_streams(activity_id, headers):
 
@@ -81,9 +81,9 @@ def get_streams(activity_id, headers):
     return r.json()
 
 
-# --------------------------
+# -----------------------
 # DATAFRAME
-# --------------------------
+# -----------------------
 
 def streams_to_dataframe(streams):
 
@@ -95,17 +95,19 @@ def streams_to_dataframe(streams):
     df = pd.DataFrame(data)
 
     if "velocity_smooth" in df:
+
         df["speed_kmh"] = df["velocity_smooth"] * 3.6
-        df["pace_min_km"] = (1000/df["velocity_smooth"])/60
+
+        df["pace_min_km"] = (1000 / df["velocity_smooth"]) / 60
 
     return df
 
 
-# --------------------------
+# -----------------------
 # BEST EFFORTS
-# --------------------------
+# -----------------------
 
-def best_efforts(series, durations):
+def best_efforts(series, durations, mode="max"):
 
     series = series.replace([float("inf")],None).dropna()
 
@@ -118,7 +120,10 @@ def best_efforts(series, durations):
 
         rolling = series.rolling(d).mean()
 
-        best = rolling.max()
+        if mode == "max":
+            best = rolling.max()
+        else:
+            best = rolling.min()
 
         results[d] = best
 
@@ -136,9 +141,45 @@ def format_pace(value):
     return f"{minutes}:{seconds:02d}"
 
 
-# --------------------------
+# -----------------------
+# CRITICAL SPEED
+# -----------------------
+
+def estimate_critical_speed(efforts):
+
+    if 300 not in efforts or 1200 not in efforts:
+        return None
+
+    pace5 = efforts[300]
+    pace20 = efforts[1200]
+
+    v5 = 1000 / (pace5*60)
+    v20 = 1000 / (pace20*60)
+
+    cs = (v5 + v20) / 2
+
+    pace = (1000 / cs) / 60
+
+    return pace
+
+
+# -----------------------
+# FTP ESTIMATE
+# -----------------------
+
+def estimate_ftp(power_efforts):
+
+    if 1200 not in power_efforts:
+        return None
+
+    ftp = power_efforts[1200] * 0.95
+
+    return ftp
+
+
+# -----------------------
 # MAIN
-# --------------------------
+# -----------------------
 
 def main():
 
@@ -176,20 +217,36 @@ def main():
 
         print("points:",len(df))
 
-        # --------------------------
+        # eliminar paradas en running
+
+        if sport == "Run":
+            df = df[df["velocity_smooth"] > 1]
+
+        # ------------------
         # RUN
-        # --------------------------
+        # ------------------
 
         if sport == "Run":
 
             if "pace_min_km" in df:
 
-                efforts = best_efforts(df["pace_min_km"],EFFORT_WINDOWS)
+                efforts = best_efforts(
+                    df["pace_min_km"],
+                    EFFORT_WINDOWS,
+                    mode="min"
+                )
 
                 print("\nBEST PACE")
 
                 for d,v in efforts.items():
                     print(d,"sec →",format_pace(v),"/km")
+
+                cs = estimate_critical_speed(efforts)
+
+                if cs:
+                    print("\nEstimated Critical Pace")
+                    print(format_pace(cs),"/km")
+
 
             if "watts" in df:
 
@@ -200,6 +257,7 @@ def main():
                 for d,v in efforts.items():
                     print(d,"sec →",round(v,1),"W")
 
+
             if "heartrate" in df:
 
                 efforts = best_efforts(df["heartrate"],EFFORT_WINDOWS)
@@ -210,20 +268,29 @@ def main():
                     print(d,"sec →",round(v,1),"bpm")
 
 
-        # --------------------------
+        # ------------------
         # CYCLING
-        # --------------------------
+        # ------------------
 
         if sport in ["Ride","VirtualRide"]:
 
+            power_efforts = None
+
             if "watts" in df:
 
-                efforts = best_efforts(df["watts"],EFFORT_WINDOWS)
+                power_efforts = best_efforts(df["watts"],EFFORT_WINDOWS)
 
                 print("\nBEST POWER")
 
-                for d,v in efforts.items():
+                for d,v in power_efforts.items():
                     print(d,"sec →",round(v,1),"W")
+
+                ftp = estimate_ftp(power_efforts)
+
+                if ftp:
+                    print("\nEstimated FTP")
+                    print(round(ftp,1),"W")
+
 
             if "speed_kmh" in df:
 
@@ -234,6 +301,7 @@ def main():
                 for d,v in efforts.items():
                     print(d,"sec →",round(v,1),"km/h")
 
+
             if "heartrate" in df:
 
                 efforts = best_efforts(df["heartrate"],EFFORT_WINDOWS)
@@ -244,20 +312,25 @@ def main():
                     print(d,"sec →",round(v,1),"bpm")
 
 
-        # --------------------------
+        # ------------------
         # SWIM
-        # --------------------------
+        # ------------------
 
         if sport == "Swim":
 
             if "pace_min_km" in df:
 
-                efforts = best_efforts(df["pace_min_km"],EFFORT_WINDOWS)
+                efforts = best_efforts(
+                    df["pace_min_km"],
+                    EFFORT_WINDOWS,
+                    mode="min"
+                )
 
                 print("\nBEST SWIM PACE")
 
                 for d,v in efforts.items():
                     print(d,"sec →",format_pace(v),"/km")
+
 
             if "heartrate" in df:
 
