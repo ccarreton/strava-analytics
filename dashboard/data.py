@@ -4,64 +4,50 @@ import json
 import os
 import streamlit as st
 
-
-DB_PATH = "data/strava.db"
+DB_PATH = "data/activities.db"
 
 
 def load_data():
 
-    # ----------------------------
-    # CHECK DATABASE EXISTS
-    # ----------------------------
-
     if not os.path.exists(DB_PATH):
-
         st.error(f"Database not found: {DB_PATH}")
         return pd.DataFrame()
 
     try:
-
         conn = sqlite3.connect(DB_PATH)
+
+        # comprobar tablas existentes
+        tables = pd.read_sql(
+            "SELECT name FROM sqlite_master WHERE type='table';",
+            conn
+        )
+
+        if "activities" not in tables["name"].values:
+            st.error("Table 'activities' not found in database.")
+            return pd.DataFrame()
 
         df = pd.read_sql("SELECT * FROM activities", conn)
 
         conn.close()
 
     except Exception as e:
-
         st.error(f"Database error: {e}")
         return pd.DataFrame()
 
-    # ----------------------------
-    # DATE PARSING
-    # ----------------------------
-
+    # ---------- fechas ----------
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
 
-    # ----------------------------
-    # WEEK
-    # ----------------------------
-
+    # ---------- semana ----------
     df["week"] = df["date"].dt.to_period("W").dt.start_time
 
-    # ----------------------------
-    # TRAINING HOURS
-    # ----------------------------
-
+    # ---------- horas ----------
     df["hours"] = df["moving_time"] / 3600
 
-    # ----------------------------
-    # DEFAULT METRIC COLUMNS
-    # ----------------------------
-
+    # ---------- columnas métricas ----------
     df["max_watts"] = None
     df["avg_watts"] = None
     df["max_hr"] = None
     df["avg_hr"] = None
-
-    # ----------------------------
-    # PARSE RAW JSON
-    # ----------------------------
 
     if "raw_json" in df.columns:
 
@@ -74,7 +60,8 @@ def load_data():
         )
 
         df["avg_watts"] = parsed.apply(
-            lambda x: x.get("average_watts") or x.get("weighted_average_watts")
+            lambda x: x.get("average_watts")
+            or x.get("weighted_average_watts")
         )
 
         df["max_hr"] = parsed.apply(
