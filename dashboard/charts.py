@@ -18,7 +18,6 @@ def weekly_chart(weekly, achievements=None):
 
     fig = go.Figure()
 
-    # Weekly load bars
     fig.add_trace(
         go.Bar(
             x=weekly["week"],
@@ -28,7 +27,6 @@ def weekly_chart(weekly, achievements=None):
         )
     )
 
-    # Rolling avg
     fig.add_trace(
         go.Scatter(
             x=weekly["week"],
@@ -38,27 +36,23 @@ def weekly_chart(weekly, achievements=None):
         )
     )
 
-    # Target line
     fig.add_trace(
         go.Scatter(
             x=weekly["week"],
-            y=[7]*len(weekly),
+            y=[7] * len(weekly),
             name="target",
             line=dict(color="#10B981", dash="dash")
         )
     )
 
-    # Best week label
     best_week = weekly.loc[best_week_index]
 
     fig.add_annotation(
         x=best_week["week"],
-        y=best_week["hours"] + 0.7,
+        y=best_week["hours"] + 0.6,
         text="⭐",
         showarrow=False
     )
-
-    # Achievements markers
 
     for week, medals in achievements.items():
 
@@ -76,11 +70,7 @@ def weekly_chart(weekly, achievements=None):
                     x=[week],
                     y=[y + 0.5],
                     mode="markers",
-                    marker=dict(
-                        size=12,
-                        color="#16A34A",
-                        symbol="circle"
-                    ),
+                    marker=dict(size=12, color="#16A34A", symbol="circle"),
                     showlegend=False
                 )
             )
@@ -92,11 +82,7 @@ def weekly_chart(weekly, achievements=None):
                     x=[week],
                     y=[y + 0.9],
                     mode="markers",
-                    marker=dict(
-                        size=12,
-                        color="#F97316",
-                        symbol="diamond"
-                    ),
+                    marker=dict(size=12, color="#F97316", symbol="diamond"),
                     showlegend=False
                 )
             )
@@ -108,11 +94,7 @@ def weekly_chart(weekly, achievements=None):
                     x=[week],
                     y=[y + 1.3],
                     mode="markers",
-                    marker=dict(
-                        size=12,
-                        color="#DC2626",
-                        symbol="x"
-                    ),
+                    marker=dict(size=12, color="#DC2626", symbol="x"),
                     showlegend=False
                 )
             )
