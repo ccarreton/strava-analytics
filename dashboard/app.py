@@ -216,7 +216,7 @@ st.markdown("---")
 
 achievements = {}
 
-runs = df[df["type"]=="Run"].copy()
+runs = df[df["type"] == "Run"].copy()
 
 if not runs.empty:
 
@@ -224,24 +224,26 @@ if not runs.empty:
 
     for d in [1,5,10,21]:
 
-        subset = runs[runs["distance"]>=d*1000]
+        subset = runs[runs["distance"] >= d*1000]
 
         if subset.empty:
             continue
 
         row = subset.sort_values("pace").iloc[0]
 
-        achievements.setdefault(row["week"],[]).append("🏃")
+        achievements.setdefault(row["week"], []).append("run")
 
 if df["max_watts"].notna().any():
 
     row = df.loc[df["max_watts"].idxmax()]
-    achievements.setdefault(row["week"],[]).append("⚡")
+
+    achievements.setdefault(row["week"], []).append("power")
 
 if df["max_hr"].notna().any():
 
     row = df.loc[df["max_hr"].idxmax()]
-    achievements.setdefault(row["week"],[]).append("❤️")
+
+    achievements.setdefault(row["week"], []).append("hr")
 
 
 # ----------------------------------------------------
@@ -257,6 +259,8 @@ main, side = st.columns([3,1])
 
 with main:
 
+    show_records = st.toggle("🏅 Show performance records")
+    
     st.subheader("Weekly Training Load")
 
     fig = weekly_chart(weekly, achievements)
@@ -314,8 +318,6 @@ with main:
 
 with side:
 
-    st.markdown('<div class="widget">', unsafe_allow_html=True)
-
     st.markdown("### 💡 Weekly Insight")
 
     sessions = df[df["week"]==latest["week"]].shape[0]
@@ -336,7 +338,7 @@ with side:
 # COLLAPSIBLE RECORDS
 # ----------------------------------------------------
 
-show_records = st.toggle("🏅 Show performance records")
+
 
 if show_records:
 
