@@ -33,7 +33,7 @@ def load_data():
         utc=True
     ).dt.tz_convert(None)
 
-    df["week"] = df["date"].dt.to_period("W").dt.start_time
+    df["week"] = df["date"].dt.to_period("W-MON").dt.start_time
 
     # -----------------------------
     # BASIC METRICS
