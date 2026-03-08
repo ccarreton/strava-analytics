@@ -15,11 +15,9 @@ SPORT_GROUPS = {
 
 def apply_filters(df):
 
-    if "type" not in df.columns:
-        st.warning("Column 'type' not found in dataset.")
-        return df
-
     st.markdown("### Filters")
+
+    # -------- SPORT FILTER --------
 
     sport = st.multiselect(
         "Sport",
@@ -32,18 +30,32 @@ def apply_filters(df):
     for s in sport:
         selected_types += SPORT_GROUPS[s]
 
-    df = df[df["type"].isin(selected_types)]
+    if "type" in df.columns:
+        df = df[df["type"].isin(selected_types)]
+
+    # -------- TIME FILTER --------
 
     time_range = st.radio(
         "Time range",
-        ["All time", "YTD", "2YTD", "4YTD"]
+        [
+            "Last 6 months",
+            "YTD",
+            "2YTD",
+            "4YTD",
+            "All time"
+        ]
     )
 
     now = pd.Timestamp.now()
 
-    if time_range == "YTD":
+    if time_range == "Last 6 months":
 
-        cutoff = pd.Timestamp(now.year, 1, 1)
+        cutoff = now - pd.DateOffset(months=6)
+        df = df[df["date"] >= cutoff]
+
+    elif time_range == "YTD":
+
+        cutoff = pd.Timestamp(year=now.year, month=1, day=1)
         df = df[df["date"] >= cutoff]
 
     elif time_range == "2YTD":
