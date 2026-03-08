@@ -1,156 +1,29 @@
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
-import json
 
 from data import load_data
 from filters import apply_filters
 from charts import weekly_chart
+from training_status import training_status_gauge
 from config import ROLLING_WINDOW, CTL_WINDOW, ATL_WINDOW
 
-
-# ----------------------------------------------------
-# PAGE CONFIG
-# ----------------------------------------------------
 
 st.set_page_config(
     page_title="Strava Training Dashboard",
     layout="wide"
 )
 
-
-# ----------------------------------------------------
-# STYLE
-# ----------------------------------------------------
-
-st.markdown("""
-<style>
-
-body {
-    background-color: #F6F8FB;
-}
-
-.block-container {
-    padding-top: 1rem;
-}
-
-.metric-card {
-    background: white;
-    border: 1px solid #E5E7EB;
-    border-radius: 12px;
-    padding: 20px;
-}
-
-.metric-title {
-    font-size: 12px;
-    font-weight: 600;
-    color: #6B7280;
-}
-
-.metric-value {
-    font-size: 28px;
-    font-weight: 700;
-}
-
-.widget {
-    background: white;
-    border: 1px solid #E5E7EB;
-    border-radius: 12px;
-    padding: 16px;
-    margin-bottom: 20px;
-}
-
-.filter-box {
-    background: white;
-    border: 1px solid #E5E7EB;
-    border-radius: 12px;
-    padding: 15px;
-    margin-bottom: 20px;
-}
-
-[data-baseweb="tag"] {
-    background-color: #E5E7EB !important;
-    color: #111827 !important;
-}
-
-</style>
-""", unsafe_allow_html=True)
-
-
-# ----------------------------------------------------
-# TITLE
-# ----------------------------------------------------
-
 st.title("🏃 Strava Training Dashboard")
-
-
-# ----------------------------------------------------
-# LOAD DATA
-# ----------------------------------------------------
 
 df = load_data()
 
-if df.empty:
-    st.warning("No activities available.")
-    st.stop()
-
-
-# ----------------------------------------------------
-# FILTERS
-# ----------------------------------------------------
-
-with st.container():
-
-    st.markdown('<div class="filter-box">', unsafe_allow_html=True)
-
-    df = apply_filters(df)
-
-    st.markdown('</div>', unsafe_allow_html=True)
+df = apply_filters(df)
 
 if df.empty:
     st.warning("No activities match filters.")
     st.stop()
 
-
-# ----------------------------------------------------
-# PARSE RAW JSON
-# ----------------------------------------------------
-
-if "raw_json" in df.columns:
-
-    def parse_raw(row):
-        try:
-            return json.loads(row)
-        except:
-            return {}
-
-    parsed = df["raw_json"].apply(parse_raw)
-
-    df["max_watts"] = parsed.apply(lambda x: x.get("max_watts"))
-    df["avg_watts"] = parsed.apply(
-        lambda x: x.get("average_watts") or x.get("weighted_average_watts")
-    )
-
-    df["max_hr"] = parsed.apply(lambda x: x.get("max_heartrate"))
-    df["avg_hr"] = parsed.apply(lambda x: x.get("average_heartrate"))
-
-else:
-
-    df["max_watts"] = None
-    df["avg_watts"] = None
-    df["max_hr"] = None
-    df["avg_hr"] = None
-
-
-# ----------------------------------------------------
-# WEEKLY AGGREGATION
-# ----------------------------------------------------
-
-weekly = (
-    df.groupby("week", as_index=False)["hours"]
-    .sum()
-    .sort_values("week")
-)
+weekly = df.groupby("week", as_index=False)["hours"].sum()
 
 weekly["rolling"] = weekly["hours"].rolling(
     ROLLING_WINDOW,
@@ -176,43 +49,17 @@ rolling = latest["rolling"]
 ctl = latest["fitness"]
 atl = latest["fatigue"]
 
+best_week = weekly["hours"].max()
 
-# ----------------------------------------------------
-# BEST WEEK
-# ----------------------------------------------------
+c1, c2, c3, c4, c5 = st.columns(5)
 
-best_row = weekly.loc[weekly["hours"].idxmax()]
-best_week = best_row["hours"]
+c1.metric("This week", f"{current_week:.1f} h")
+c2.metric("4 week avg", f"{rolling:.1f} h")
+c3.metric("Fitness (CTL)", f"{ctl:.0f}")
+c4.metric("Fatigue (ATL)", f"{atl:.0f}")
+c5.metric("Best week", f"{best_week:.1f} h")
 
-
-# ----------------------------------------------------
-# KPI ROW
-# ----------------------------------------------------
-
-c1,c2,c3,c4,c5 = st.columns(5)
-
-def card(col,title,value):
-
-    col.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-title">{title}</div>
-        <div class="metric-value">{value}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-card(c1,"THIS WEEK",f"{current_week:.1f} h")
-card(c2,"4 WEEK AVG",f"{rolling:.1f} h")
-card(c3,"FITNESS (CTL)",f"{ctl:.0f}")
-card(c4,"FATIGUE (ATL)",f"{atl:.0f}")
-card(c5,"BEST WEEK",f"{best_week:.1f} h")
-
-
-st.markdown("---")
-
-
-# ----------------------------------------------------
-# ACHIEVEMENTS DETECTION
-# ----------------------------------------------------
+show_records = st.toggle("🏅 Show performance records")
 
 achievements = {}
 
@@ -245,22 +92,10 @@ if df["max_hr"].notna().any():
 
     achievements.setdefault(row["week"], []).append("hr")
 
-
-# ----------------------------------------------------
-# LAYOUT
-# ----------------------------------------------------
-
 main, side = st.columns([3,1])
-
-
-# ----------------------------------------------------
-# MAIN
-# ----------------------------------------------------
 
 with main:
 
-    show_records = st.toggle("🏅 Show performance records")
-    
     st.subheader("Weekly Training Load")
 
     fig = weekly_chart(weekly, achievements)
@@ -271,131 +106,39 @@ with main:
         config={"displayModeBar": False}
     )
 
-
     st.subheader("Fitness / Fatigue Model")
+
+    import plotly.graph_objects as go
 
     fig2 = go.Figure()
 
-    fig2.add_trace(
-        go.Scatter(
-            x=weekly["week"],
-            y=weekly["fitness"],
-            name="Fitness (CTL)",
-            line=dict(width=3)
-        )
-    )
-
-    fig2.add_trace(
-        go.Scatter(
-            x=weekly["week"],
-            y=weekly["fatigue"],
-            name="Fatigue (ATL)",
-            line=dict(width=3)
-        )
-    )
-
-    fig2.add_trace(
-        go.Scatter(
-            x=weekly["week"],
-            y=weekly["form"],
-            name="Form (TSB)",
-            line=dict(dash="dot")
-        )
-    )
+    fig2.add_trace(go.Scatter(x=weekly["week"], y=weekly["fitness"], name="Fitness"))
+    fig2.add_trace(go.Scatter(x=weekly["week"], y=weekly["fatigue"], name="Fatigue"))
+    fig2.add_trace(go.Scatter(x=weekly["week"], y=weekly["form"], name="Form", line=dict(dash="dot")))
 
     fig2.update_layout(height=300)
 
-    st.plotly_chart(
-        fig2,
-        use_container_width=True,
-        config={"displayModeBar": False}
-    )
-
-
-# ----------------------------------------------------
-# SIDEBAR
-# ----------------------------------------------------
+    st.plotly_chart(fig2, use_container_width=True)
 
 with side:
 
     st.markdown("### 💡 Weekly Insight")
 
-    sessions = df[df["week"]==latest["week"]].shape[0]
+    sessions = df[df["week"] == latest["week"]].shape[0]
 
     load_diff = (current_week - rolling)/rolling*100
 
-    trend = "📈 improving" if weekly["fitness"].iloc[-1] > weekly["fitness"].iloc[-2] else "stable"
+    trend = "improving" if weekly["fitness"].iloc[-1] > weekly["fitness"].iloc[-2] else "stable"
 
     st.write(f"Training load: **{current_week:.1f} h**")
     st.write(f"vs average: **{load_diff:+.0f}%**")
     st.write(f"Sessions: **{sessions}**")
     st.write(f"Fitness trend: **{trend}**")
 
-    st.markdown('</div>', unsafe_allow_html=True)
+    tsb = latest["form"]
 
-
-# ----------------------------------------------------
-# COLLAPSIBLE RECORDS
-# ----------------------------------------------------
-
-
-
-if show_records:
-
-    col1,col2,col3 = st.columns(3)
-
-    with col1:
-
-        st.markdown("### 🏃 Running PRs")
-
-        if not runs.empty:
-
-            def best(d):
-
-                subset = runs[runs["distance"]>=d*1000]
-
-                if subset.empty:
-                    return None
-
-                row = subset.sort_values("pace").iloc[0]
-
-                p=row["pace"]
-
-                return f"{int(p//60)}:{int(p%60):02d}/km"
-
-            st.write(f"1 km — **{best(1)}**")
-            st.write(f"5 km — **{best(5)}**")
-            st.write(f"10 km — **{best(10)}**")
-            st.write(f"21 km — **{best(21)}**")
-
-
-    with col2:
-
-        st.markdown("### ⚡ Power Records")
-
-        bike = df[df["type"]=="Ride"]
-
-        if bike["max_watts"].notna().any():
-
-            row=bike.loc[bike["max_watts"].idxmax()]
-            st.write(f"Max power — **{int(row['max_watts'])} W**")
-
-        if bike["avg_watts"].notna().any():
-
-            row=bike.loc[bike["avg_watts"].idxmax()]
-            st.write(f"Best avg — **{int(row['avg_watts'])} W**")
-
-
-    with col3:
-
-        st.markdown("### ❤️ Heart Rate")
-
-        if df["max_hr"].notna().any():
-
-            row=df.loc[df["max_hr"].idxmax()]
-            st.write(f"Max HR — **{int(row['max_hr'])} bpm**")
-
-        if df["avg_hr"].notna().any():
-
-            row=df.loc[df["avg_hr"].idxmax()]
-            st.write(f"Best avg HR — **{int(row['avg_hr'])} bpm**")
+    st.plotly_chart(
+        training_status_gauge(tsb),
+        use_container_width=True,
+        config={"displayModeBar": False}
+    )
