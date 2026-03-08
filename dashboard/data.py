@@ -1,32 +1,68 @@
 import sqlite3
 import pandas as pd
 import json
+import os
+import streamlit as st
+
+
+DB_PATH = "data/strava.db"
 
 
 def load_data():
 
-    conn = sqlite3.connect("data/strava.db")
+    # ----------------------------
+    # CHECK DATABASE EXISTS
+    # ----------------------------
 
-    df = pd.read_sql("SELECT * FROM activities", conn)
+    if not os.path.exists(DB_PATH):
 
-    conn.close()
+        st.error(f"Database not found: {DB_PATH}")
+        return pd.DataFrame()
 
-    # --- DATE PARSING ---
+    try:
+
+        conn = sqlite3.connect(DB_PATH)
+
+        df = pd.read_sql("SELECT * FROM activities", conn)
+
+        conn.close()
+
+    except Exception as e:
+
+        st.error(f"Database error: {e}")
+        return pd.DataFrame()
+
+    # ----------------------------
+    # DATE PARSING
+    # ----------------------------
+
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
 
-    # --- WEEK COLUMN ---
+    # ----------------------------
+    # WEEK
+    # ----------------------------
+
     df["week"] = df["date"].dt.to_period("W").dt.start_time
 
-    # --- TRAINING HOURS ---
+    # ----------------------------
+    # TRAINING HOURS
+    # ----------------------------
+
     df["hours"] = df["moving_time"] / 3600
 
-    # --- DEFAULT COLUMNS (important for stability) ---
+    # ----------------------------
+    # DEFAULT METRIC COLUMNS
+    # ----------------------------
+
     df["max_watts"] = None
     df["avg_watts"] = None
     df["max_hr"] = None
     df["avg_hr"] = None
 
-    # --- PARSE RAW JSON IF EXISTS ---
+    # ----------------------------
+    # PARSE RAW JSON
+    # ----------------------------
+
     if "raw_json" in df.columns:
 
         parsed = df["raw_json"].apply(
@@ -38,8 +74,7 @@ def load_data():
         )
 
         df["avg_watts"] = parsed.apply(
-            lambda x: x.get("average_watts")
-            or x.get("weighted_average_watts")
+            lambda x: x.get("average_watts") or x.get("weighted_average_watts")
         )
 
         df["max_hr"] = parsed.apply(
