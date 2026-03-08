@@ -1,46 +1,41 @@
 import sqlite3
 import pandas as pd
+import json
 
 
 def load_data():
 
-    conn = sqlite3.connect("data/activities.db")
+    conn = sqlite3.connect("data/strava.db")
 
-    df = pd.read_sql("""
-        SELECT
-            id,
-            name,
-            type,
-            start_date,
-            distance,
-            moving_time,
-            raw_json
-        FROM activities
-    """, conn)
+    df = pd.read_sql("SELECT * FROM activities", conn)
 
     conn.close()
 
-    if df.empty:
-        return df
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
 
-    # parse strava datetime
-    df["date"] = pd.to_datetime(df["start_date"], errors="coerce")
+    df["week"] = df["date"].dt.to_period("W").dt.start_time
 
-    # eliminar timezone si existe
-    try:
-        df["date"] = df["date"].dt.tz_localize(None)
-    except:
-        pass
-
-    df = df.dropna(subset=["date"])
-
-    # metrics
     df["hours"] = df["moving_time"] / 3600
-    df["km"] = df["distance"] / 1000
 
-    # week key
-    df["week"] = df["date"].dt.to_period("W").apply(lambda r: r.start_time)
+    if "raw_json" in df.columns:
 
-    df["location"] = df["name"]
+        parsed = df["raw_json"].apply(
+            lambda x: json.loads(x) if x else {}
+        )
+
+        df["max_watts"] = parsed.apply(lambda x: x.get("max_watts"))
+        df["avg_watts"] = parsed.apply(
+            lambda x: x.get("average_watts") or x.get("weighted_average_watts")
+        )
+
+        df["max_hr"] = parsed.apply(lambda x: x.get("max_heartrate"))
+        df["avg_hr"] = parsed.apply(lambda x: x.get("average_heartrate"))
+
+    else:
+
+        df["max_watts"] = None
+        df["avg_watts"] = None
+        df["max_hr"] = None
+        df["avg_hr"] = None
 
     return df
