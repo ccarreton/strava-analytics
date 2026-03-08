@@ -15,6 +15,10 @@ SPORT_GROUPS = {
 
 def apply_filters(df):
 
+    if "type" not in df.columns:
+        st.warning("Column 'type' not found in dataset.")
+        return df
+
     st.markdown("### Filters")
 
     sport = st.multiselect(
