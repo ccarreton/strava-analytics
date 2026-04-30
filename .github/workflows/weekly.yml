@@ -37,6 +37,9 @@ jobs:
           STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
           STRAVA_REFRESH_TOKEN: ${{ secrets.STRAVA_REFRESH_TOKEN }}
 
+      - name: Compute performance patterns
+        run: python performance_patterns.py
+
       - name: Generate weekly report
         run: python scripts/weekly_report.py
         env:
