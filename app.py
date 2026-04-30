@@ -19,7 +19,7 @@ config = load_module("config_local", DASHBOARD_DIR / "config.py")
 
 # 👇 FUNCIONES
 load_data = data.load_data
-load_performance_patterns = data.load_performance_patterns
+load_performance_patterns = performance_patterns.load_patterns
 weekly_chart = charts.weekly_chart
 plot_performance_patterns = charts.plot_performance_patterns
 apply_filters = filters.apply_filters
