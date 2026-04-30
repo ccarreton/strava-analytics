@@ -27,9 +27,11 @@ jobs:
       - name: Install dependencies
         run: pip install pandas requests
 
+      # 🔹 1. Inicializar DB
       - name: Initialize database
         run: python scripts/init_db.py
 
+      # 🔹 2. Ingesta Strava (CREA/LLENA activities)
       - name: Ingest Strava activities
         run: python scripts/ingest_strava.py
         env:
@@ -37,15 +39,18 @@ jobs:
           STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
           STRAVA_REFRESH_TOKEN: ${{ secrets.STRAVA_REFRESH_TOKEN }}
 
-      - name: Compute performance patterns
-        run: python dashboard/performance_patterns.py
-
+      # 🔹 3. Report básico (usa activities)
       - name: Generate weekly report
         run: python scripts/weekly_report.py
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
+      # 🔹 4. NUEVO: patrones (usa activities ya cargadas)
+      - name: Compute performance patterns
+        run: python dashboard/performance_patterns.py
+
+      # 🔹 5. Commit DB actualizada
       - name: Commit updated database
         run: |
           git config --global user.name "strava-bot"
