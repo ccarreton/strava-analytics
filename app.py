@@ -1,9 +1,9 @@
 import sys
 from pathlib import Path
 
-# ✅ añade SOLO la carpeta actual (dashboard)
-CURRENT_DIR = Path(__file__).resolve().parent
-sys.path.append(str(CURRENT_DIR))
+# ✅ añade raíz del repo al path (SOLUCIÓN DEFINITIVA)
+ROOT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT_DIR))
 
 import streamlit as st
 import pandas as pd
