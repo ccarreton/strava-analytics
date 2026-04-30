@@ -10,19 +10,20 @@ def load_module(name, path):
     spec.loader.exec_module(module)
     return module
 
-# 👇 CARGA DE MÓDULOS
 data = load_module("data_local", DASHBOARD_DIR / "data.py")
 charts = load_module("charts_local", DASHBOARD_DIR / "charts.py")
 filters = load_module("filters_local", DASHBOARD_DIR / "filters.py")
 training_status = load_module("training_status_local", DASHBOARD_DIR / "training_status.py")
 config = load_module("config_local", DASHBOARD_DIR / "config.py")
-
-# 🔥 ESTA LÍNEA TE FALTA (AÑÁDELA AQUÍ)
 performance_patterns = load_module("pp_local", DASHBOARD_DIR / "performance_patterns.py")
 
-# 👇 FUNCIONES
+# 👇 IMPORTS QUE TE FALTAN
+import streamlit as st
+import pandas as pd
+
+# funciones
 load_data = data.load_data
-load_performance_patterns = performance_patterns.load_patterns  # 👈 ahora sí existe
+load_performance_patterns = performance_patterns.load_patterns
 weekly_chart = charts.weekly_chart
 plot_performance_patterns = charts.plot_performance_patterns
 apply_filters = filters.apply_filters
