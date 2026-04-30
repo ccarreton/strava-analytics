@@ -1,11 +1,11 @@
 import streamlit as st
 import pandas as pd
 
-from data import load_data, load_performance_patterns
-from filters import apply_filters
-from charts import weekly_chart, plot_performance_patterns
-from training_status import training_status_gauge
-from config import ROLLING_WINDOW, CTL_WINDOW, ATL_WINDOW
+from dashboard.data import load_data, load_performance_patterns
+from dashboard.charts import weekly_chart, plot_performance_patterns
+from dashboard.filters import apply_filters
+from dashboard.training_status import training_status_gauge
+from dashboard.config import ROLLING_WINDOW, CTL_WINDOW, ATL_WINDOW
 
 
 st.set_page_config(
