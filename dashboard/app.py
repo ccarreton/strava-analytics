@@ -1,5 +1,10 @@
 import sys
-import os
+from pathlib import Path
+
+# 🔥 FIX DEFINITIVO: añadir raíz del repo al path
+ROOT_DIR = Path(__file__).resolve().parents[1]
+sys.path.append(str(ROOT_DIR))
+
 import streamlit as st
 import pandas as pd
 
@@ -20,7 +25,7 @@ st.title("🏃 Strava Training Dashboard")
 df = load_data()
 df = apply_filters(df)
 
-# 🔹 NUEVO: cargar patrones
+# 🔹 cargar patrones
 patterns = load_performance_patterns()
 
 if df.empty:
@@ -124,7 +129,7 @@ with main:
 
     st.plotly_chart(fig2, use_container_width=True)
 
-    # 🔹 NUEVO BLOQUE: patrones pre-PB
+    # 🔹 patrones pre-PB
     st.subheader("🏁 Load Before PBs")
 
     if not patterns.empty:
