@@ -132,3 +132,17 @@ def plot_performance_patterns(df):
     )
 
     return fig
+import plotly.express as px
+
+
+def plot_pb_timeline(df):
+    fig = px.scatter(
+        df,
+        x="date",
+        y="km_8w",
+        color="distance",
+        hover_data=["pace"],
+        title="PB Timeline with 8-week Load"
+    )
+
+    return fig
