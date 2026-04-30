@@ -2,6 +2,22 @@ import importlib.util
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
+DATA_PATH = BASE_DIR / "dashboard" / "data.py"
+
+spec = importlib.util.spec_from_file_location("debug_data", DATA_PATH)
+debug_data = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(debug_data)
+
+import streamlit as st
+
+st.write("DATA FILE:", DATA_PATH)
+st.write("HAS FUNCTION:", hasattr(debug_data, "load_performance_patterns"))
+st.stop()
+
+import importlib.util
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
 DASHBOARD_DIR = BASE_DIR / "dashboard"
 
 def load_module(name, path):
