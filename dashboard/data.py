@@ -74,7 +74,15 @@ def load_data():
 
     return df
     
-    def load_performance_patterns(conn):
-        import pandas as pd
-        return pd.read_sql("SELECT * FROM performance_patterns", conn)
+    def load_performance_patterns():
+        conn = sqlite3.connect("data/activities.db")
+    
+        try:
+            df = pd.read_sql("SELECT * FROM performance_patterns", conn)
+        except Exception:
+            df = pd.DataFrame()
+    
+        conn.close()
+    
+        return df
 
