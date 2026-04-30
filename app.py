@@ -16,6 +16,8 @@ filters = load_module("filters_local", DASHBOARD_DIR / "filters.py")
 training_status = load_module("training_status_local", DASHBOARD_DIR / "training_status.py")
 config = load_module("config_local", DASHBOARD_DIR / "config.py")
 performance_patterns = load_module("pp_local", DASHBOARD_DIR / "performance_patterns.py")
+performance_timeline = load_module("pt_local", DASHBOARD_DIR / "performance_timeline.py")
+
 
 # 👇 IMPORTS QUE TE FALTAN
 import streamlit as st
@@ -28,6 +30,7 @@ weekly_chart = charts.weekly_chart
 plot_performance_patterns = charts.plot_performance_patterns
 apply_filters = filters.apply_filters
 training_status_gauge = training_status.training_status_gauge
+compute_pb_timeline = performance_timeline.compute_pb_timeline
 
 ROLLING_WINDOW = config.ROLLING_WINDOW
 CTL_WINDOW = config.CTL_WINDOW
@@ -148,6 +151,16 @@ with main:
         )
     else:
         st.info("No performance patterns available yet.")
+
+        st.subheader("📈 PB Timeline")
+        
+        timeline_df = compute_pb_timeline()
+        
+        if not timeline_df.empty:
+            fig = plot_pb_timeline(timeline_df)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No PB data available")
 
 with side:
 
