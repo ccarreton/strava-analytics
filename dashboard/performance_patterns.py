@@ -1,6 +1,7 @@
 import sqlite3
 import pandas as pd
 from datetime import timedelta
+import os
 
 DB_PATH = "data/activities.db"
 
@@ -14,6 +15,8 @@ WINDOW_DAYS = 28  # 4 semanas
 
 
 def get_connection():
+    if not os.path.exists(DB_PATH):
+        raise FileNotFoundError(f"Database not found at {DB_PATH}")
     return sqlite3.connect(DB_PATH)
 
 
@@ -30,6 +33,11 @@ def get_top_activities(conn, min_dist, max_dist, limit=5):
 
 
 def get_weekly_km(conn, start_date, end_date):
+
+    # 🔹 FIX CLAVE: convertir fechas a string
+    start_date = pd.to_datetime(start_date).strftime("%Y-%m-%d")
+    end_date = pd.to_datetime(end_date).strftime("%Y-%m-%d")
+
     query = """
         SELECT
             date(start_date) as day,
@@ -38,6 +46,7 @@ def get_weekly_km(conn, start_date, end_date):
         WHERE type = 'Run'
           AND date(start_date) BETWEEN date(?) AND date(?)
     """
+
     df = pd.read_sql(query, conn, params=(start_date, end_date))
 
     if df.empty:
@@ -45,8 +54,9 @@ def get_weekly_km(conn, start_date, end_date):
 
     df["day"] = pd.to_datetime(df["day"])
 
-    # week_offset: semanas relativas al día objetivo
-    df["week_offset"] = ((df["day"].max() - df["day"]).dt.days // 7) * -1
+    # calcular semana relativa
+    max_day = df["day"].max()
+    df["week_offset"] = ((df["day"] - max_day).dt.days // 7)
 
     weekly = (
         df.groupby("week_offset")["km"]
@@ -74,6 +84,9 @@ def compute_patterns(conn):
 
             weekly = get_weekly_km(conn, start_window, race_date)
 
+            if weekly.empty:
+                continue
+
             weekly["distance"] = label
             pattern_accumulator.append(weekly)
 
@@ -98,7 +111,6 @@ def compute_patterns(conn):
 
 def save_patterns(conn, df):
     conn.execute("DROP TABLE IF EXISTS performance_patterns")
-
     df.to_sql("performance_patterns", conn, index=False)
 
 
