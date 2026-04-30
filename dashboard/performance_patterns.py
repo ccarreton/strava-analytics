@@ -2,7 +2,7 @@ import sqlite3
 import pandas as pd
 from datetime import timedelta
 
-DB_PATH = "activities.db"
+DB_PATH = "data/activities.db"
 
 DISTANCE_BUCKETS = {
     "5K": (4900, 5100),
