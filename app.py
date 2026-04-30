@@ -1,19 +1,19 @@
 import sys
 from pathlib import Path
 
-# ✅ añade raíz del repo al path (SOLUCIÓN DEFINITIVA)
-ROOT_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT_DIR))
+# 👉 añade la carpeta dashboard directamente
+DASHBOARD_DIR = Path(__file__).resolve().parent / "dashboard"
+sys.path.insert(0, str(DASHBOARD_DIR))
 
 import streamlit as st
 import pandas as pd
 
-# ✅ imports locales (SIN dashboard.)
-from dashboard.data import load_data, load_performance_patterns
-from dashboard.charts import weekly_chart, plot_performance_patterns
-from dashboard.filters import apply_filters
-from dashboard.training_status import training_status_gauge
-from dashboard.config import ROLLING_WINDOW, CTL_WINDOW, ATL_WINDOW
+# 👉 imports locales (SIN dashboard.)
+from data import load_data, load_performance_patterns
+from charts import weekly_chart, plot_performance_patterns
+from filters import apply_filters
+from training_status import training_status_gauge
+from config import ROLLING_WINDOW, CTL_WINDOW, ATL_WINDOW
 
 
 st.set_page_config(
