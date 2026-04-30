@@ -1,18 +1,19 @@
 import sys
 from pathlib import Path
 
-# 🔥 FIX DEFINITIVO: añadir raíz del repo al path
-ROOT_DIR = Path(__file__).resolve().parents[1]
-sys.path.append(str(ROOT_DIR))
+# ✅ añade SOLO la carpeta actual (dashboard)
+CURRENT_DIR = Path(__file__).resolve().parent
+sys.path.append(str(CURRENT_DIR))
 
 import streamlit as st
 import pandas as pd
 
-from dashboard.data import load_data, load_performance_patterns
-from dashboard.charts import weekly_chart, plot_performance_patterns
-from dashboard.filters import apply_filters
-from dashboard.training_status import training_status_gauge
-from dashboard.config import ROLLING_WINDOW, CTL_WINDOW, ATL_WINDOW
+# ✅ imports locales (SIN dashboard.)
+from data import load_data, load_performance_patterns
+from charts import weekly_chart, plot_performance_patterns
+from filters import apply_filters
+from training_status import training_status_gauge
+from config import ROLLING_WINDOW, CTL_WINDOW, ATL_WINDOW
 
 
 st.set_page_config(
@@ -25,7 +26,6 @@ st.title("🏃 Strava Training Dashboard")
 df = load_data()
 df = apply_filters(df)
 
-# 🔹 cargar patrones
 patterns = load_performance_patterns()
 
 if df.empty:
@@ -75,30 +75,22 @@ achievements = {}
 runs = df[df["type"] == "Run"].copy()
 
 if not runs.empty:
-
     runs["pace"] = runs["moving_time"]/(runs["distance"]/1000)
 
     for d in [1,5,10,21]:
-
         subset = runs[runs["distance"] >= d*1000]
-
         if subset.empty:
             continue
 
         row = subset.sort_values("pace").iloc[0]
-
         achievements.setdefault(row["week"], []).append("run")
 
 if df["max_watts"].notna().any():
-
     row = df.loc[df["max_watts"].idxmax()]
-
     achievements.setdefault(row["week"], []).append("power")
 
 if df["max_hr"].notna().any():
-
     row = df.loc[df["max_hr"].idxmax()]
-
     achievements.setdefault(row["week"], []).append("hr")
 
 main, side = st.columns([3,1])
@@ -120,7 +112,6 @@ with main:
     import plotly.graph_objects as go
 
     fig2 = go.Figure()
-
     fig2.add_trace(go.Scatter(x=weekly["week"], y=weekly["fitness"], name="Fitness"))
     fig2.add_trace(go.Scatter(x=weekly["week"], y=weekly["fatigue"], name="Fatigue"))
     fig2.add_trace(go.Scatter(x=weekly["week"], y=weekly["form"], name="Form", line=dict(dash="dot")))
@@ -129,19 +120,15 @@ with main:
 
     st.plotly_chart(fig2, use_container_width=True)
 
-    # 🔹 patrones pre-PB
     st.subheader("🏁 Load Before PBs")
 
     if not patterns.empty:
-
         fig3 = plot_performance_patterns(patterns)
-
         st.plotly_chart(
             fig3,
             use_container_width=True,
             config={"displayModeBar": False}
         )
-
     else:
         st.info("No performance patterns available yet.")
 
@@ -150,9 +137,7 @@ with side:
     st.markdown("### 💡 Weekly Insight")
 
     sessions = df[df["week"] == latest["week"]].shape[0]
-
     load_diff = (current_week - rolling)/rolling*100
-
     trend = "improving" if weekly["fitness"].iloc[-1] > weekly["fitness"].iloc[-2] else "stable"
 
     st.write(f"Training load: **{current_week:.1f} h**")
