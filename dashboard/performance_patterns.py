@@ -113,7 +113,21 @@ def save_patterns(conn, df):
     conn.execute("DROP TABLE IF EXISTS performance_patterns")
     df.to_sql("performance_patterns", conn, index=False)
 
+def load_patterns():
+    import sqlite3
+    import pandas as pd
 
+    conn = sqlite3.connect("data/activities.db")
+
+    try:
+        df = pd.read_sql("SELECT * FROM performance_patterns", conn)
+    except Exception:
+        df = pd.DataFrame()
+
+    conn.close()
+
+    return df
+    
 def main():
     conn = get_connection()
 
