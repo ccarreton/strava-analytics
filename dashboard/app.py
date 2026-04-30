@@ -1,9 +1,9 @@
 import streamlit as st
 import pandas as pd
 
-from data import load_data
+from data import load_data, load_performance_patterns
 from filters import apply_filters
-from charts import weekly_chart
+from charts import weekly_chart, plot_performance_patterns
 from training_status import training_status_gauge
 from config import ROLLING_WINDOW, CTL_WINDOW, ATL_WINDOW
 
@@ -16,8 +16,10 @@ st.set_page_config(
 st.title("🏃 Strava Training Dashboard")
 
 df = load_data()
-
 df = apply_filters(df)
+
+# 🔹 NUEVO: cargar patrones
+patterns = load_performance_patterns()
 
 if df.empty:
     st.warning("No activities match filters.")
@@ -119,6 +121,22 @@ with main:
     fig2.update_layout(height=300)
 
     st.plotly_chart(fig2, use_container_width=True)
+
+    # 🔹 NUEVO BLOQUE: patrones pre-PB
+    st.subheader("🏁 Load Before PBs")
+
+    if not patterns.empty:
+
+        fig3 = plot_performance_patterns(patterns)
+
+        st.plotly_chart(
+            fig3,
+            use_container_width=True,
+            config={"displayModeBar": False}
+        )
+
+    else:
+        st.info("No performance patterns available yet.")
 
 with side:
 
