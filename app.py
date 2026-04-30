@@ -12,6 +12,7 @@ import streamlit as st
 
 st.write("DATA FILE:", DATA_PATH)
 st.write("HAS FUNCTION:", hasattr(debug_data, "load_performance_patterns"))
+st.code(open(DATA_PATH).read())
 st.stop()
 
 import importlib.util
