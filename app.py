@@ -1,21 +1,23 @@
-import sys
+import importlib.util
 from pathlib import Path
 
-# 👉 FORZAMOS importar desde dashboard SIN ambigüedad
 BASE_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(BASE_DIR / "dashboard"))
+DASHBOARD_DIR = BASE_DIR / "dashboard"
 
-import streamlit as st
-import pandas as pd
+def load_module(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
-# 👇 ahora sí: importa directamente del dashboard
-import data
-import charts
-import filters
-import training_status
-import config
+# 👇 CARGA REAL DE TUS ARCHIVOS (SIN CONFUSIÓN POSIBLE)
+data = load_module("data_local", DASHBOARD_DIR / "data.py")
+charts = load_module("charts_local", DASHBOARD_DIR / "charts.py")
+filters = load_module("filters_local", DASHBOARD_DIR / "filters.py")
+training_status = load_module("training_status_local", DASHBOARD_DIR / "training_status.py")
+config = load_module("config_local", DASHBOARD_DIR / "config.py")
 
-# 👇 alias claros
+# 👇 FUNCIONES
 load_data = data.load_data
 load_performance_patterns = data.load_performance_patterns
 weekly_chart = charts.weekly_chart
