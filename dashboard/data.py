@@ -73,3 +73,8 @@ def load_data():
     df["avg_hr"] = parsed.apply(lambda x: x.get("average_heartrate"))
 
     return df
+    
+    def load_performance_patterns(conn):
+        import pandas as pd
+        return pd.read_sql("SELECT * FROM performance_patterns", conn)
+
