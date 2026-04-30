@@ -1,19 +1,36 @@
 import sys
 from pathlib import Path
+import importlib.util
 
-# 👉 añade la carpeta dashboard directamente
-DASHBOARD_DIR = Path(__file__).resolve().parent / "dashboard"
-sys.path.insert(0, str(DASHBOARD_DIR))
+BASE_DIR = Path(__file__).resolve().parent
+DASHBOARD_DIR = BASE_DIR / "dashboard"
 
-import streamlit as st
-import pandas as pd
 
-# 👉 imports locales (SIN dashboard.)
-from data import load_data, load_performance_patterns
-from charts import weekly_chart, plot_performance_patterns
-from filters import apply_filters
-from training_status import training_status_gauge
-from config import ROLLING_WINDOW, CTL_WINDOW, ATL_WINDOW
+def load_module(module_name, file_path):
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+# cargar módulos manualmente
+data = load_module("data", DASHBOARD_DIR / "data.py")
+charts = load_module("charts", DASHBOARD_DIR / "charts.py")
+filters = load_module("filters", DASHBOARD_DIR / "filters.py")
+training_status = load_module("training_status", DASHBOARD_DIR / "training_status.py")
+config = load_module("config", DASHBOARD_DIR / "config.py")
+
+# funciones
+load_data = data.load_data
+load_performance_patterns = data.load_performance_patterns
+weekly_chart = charts.weekly_chart
+plot_performance_patterns = charts.plot_performance_patterns
+apply_filters = filters.apply_filters
+training_status_gauge = training_status.training_status_gauge
+
+ROLLING_WINDOW = config.ROLLING_WINDOW
+CTL_WINDOW = config.CTL_WINDOW
+ATL_WINDOW = config.ATL_WINDOW
 
 
 st.set_page_config(
