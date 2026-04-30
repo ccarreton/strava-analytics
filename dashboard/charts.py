@@ -111,3 +111,24 @@ def weekly_chart(weekly, achievements=None):
     )
 
     return fig
+
+def plot_performance_patterns(df):
+    import plotly.express as px
+
+    df = df.sort_values("week_offset")
+
+    fig = px.line(
+        df,
+        x="week_offset",
+        y="km",
+        color="distance",
+        markers=True,
+        title="Training Load Before PBs",
+    )
+
+    fig.update_layout(
+        xaxis_title="Weeks before race",
+        yaxis_title="Km",
+    )
+
+    return fig
