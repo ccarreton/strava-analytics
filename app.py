@@ -139,7 +139,12 @@ with main:
     fig2.update_layout(height=300)
 
     st.plotly_chart(fig2, use_container_width=True)
-
+    st.subheader("DEBUG TIMELINE")
+    
+    timeline_df = compute_pb_timeline()
+    
+    st.write("Rows:", len(timeline_df))
+    st.dataframe(timeline_df.head())
     st.subheader("🏁 Load Before PBs")
 
     if not patterns.empty:
