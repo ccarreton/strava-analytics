@@ -97,3 +97,5 @@ def compute_pb_timeline():
     result = result.sort_values(["distance", "rank"])
 
     return result
+def summarize_training_factors(df):
+    return df.groupby("distance")[["km_8w", "km_w1", "km_4w"]].mean().round(0)
