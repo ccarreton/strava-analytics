@@ -10,6 +10,7 @@ def load_module(name, path):
     spec.loader.exec_module(module)
     return module
 
+# módulos
 data = load_module("data_local", DASHBOARD_DIR / "data.py")
 charts = load_module("charts_local", DASHBOARD_DIR / "charts.py")
 filters = load_module("filters_local", DASHBOARD_DIR / "filters.py")
@@ -18,10 +19,10 @@ config = load_module("config_local", DASHBOARD_DIR / "config.py")
 performance_patterns = load_module("pp_local", DASHBOARD_DIR / "performance_patterns.py")
 performance_timeline = load_module("pt_local", DASHBOARD_DIR / "performance_timeline.py")
 
-
-# 👇 IMPORTS QUE TE FALTAN
+# imports
 import streamlit as st
 import pandas as pd
+import plotly.graph_objects as go
 
 # funciones
 load_data = data.load_data
@@ -30,17 +31,18 @@ weekly_chart = charts.weekly_chart
 plot_performance_patterns = charts.plot_performance_patterns
 apply_filters = filters.apply_filters
 training_status_gauge = training_status.training_status_gauge
+
 compute_pb_timeline = performance_timeline.compute_pb_timeline
+summarize_training_factors = performance_timeline.summarize_training_factors
 
 ROLLING_WINDOW = config.ROLLING_WINDOW
 CTL_WINDOW = config.CTL_WINDOW
 ATL_WINDOW = config.ATL_WINDOW
 
-st.set_page_config(
-    page_title="Strava Training Dashboard",
-    layout="wide"
-)
 
+# ---------------- UI ----------------
+
+st.set_page_config(page_title="Strava Training Dashboard", layout="wide")
 st.title("🏃 Strava Training Dashboard")
 
 df = load_data()
@@ -52,58 +54,39 @@ if df.empty:
     st.warning("No activities match filters.")
     st.stop()
 
+# ---------------- METRICS ----------------
+
 weekly = df.groupby("week", as_index=False)["hours"].sum()
 
-weekly["rolling"] = weekly["hours"].rolling(
-    ROLLING_WINDOW,
-    min_periods=1
-).mean()
-
-weekly["fitness"] = weekly["hours"].ewm(
-    span=CTL_WINDOW,
-    adjust=False
-).mean()
-
-weekly["fatigue"] = weekly["hours"].ewm(
-    span=ATL_WINDOW,
-    adjust=False
-).mean()
-
+weekly["rolling"] = weekly["hours"].rolling(ROLLING_WINDOW, min_periods=1).mean()
+weekly["fitness"] = weekly["hours"].ewm(span=CTL_WINDOW, adjust=False).mean()
+weekly["fatigue"] = weekly["hours"].ewm(span=ATL_WINDOW, adjust=False).mean()
 weekly["form"] = weekly["fitness"] - weekly["fatigue"]
 
 latest = weekly.iloc[-1]
 
-current_week = latest["hours"]
-rolling = latest["rolling"]
-ctl = latest["fitness"]
-atl = latest["fatigue"]
-
-best_week = weekly["hours"].max()
-
 c1, c2, c3, c4, c5 = st.columns(5)
 
-c1.metric("This week", f"{current_week:.1f} h")
-c2.metric("4 week avg", f"{rolling:.1f} h")
-c3.metric("Fitness (CTL)", f"{ctl:.0f}")
-c4.metric("Fatigue (ATL)", f"{atl:.0f}")
-c5.metric("Best week", f"{best_week:.1f} h")
+c1.metric("This week", f"{latest['hours']:.1f} h")
+c2.metric("4 week avg", f"{latest['rolling']:.1f} h")
+c3.metric("Fitness (CTL)", f"{latest['fitness']:.0f}")
+c4.metric("Fatigue (ATL)", f"{latest['fatigue']:.0f}")
+c5.metric("Best week", f"{weekly['hours'].max():.1f} h")
 
-show_records = st.toggle("🏅 Show performance records")
+
+# ---------------- ACHIEVEMENTS ----------------
 
 achievements = {}
-
 runs = df[df["type"] == "Run"].copy()
 
 if not runs.empty:
-    runs["pace"] = runs["moving_time"]/(runs["distance"]/1000)
+    runs["pace"] = runs["moving_time"] / (runs["distance"] / 1000)
 
-    for d in [1,5,10,21]:
-        subset = runs[runs["distance"] >= d*1000]
-        if subset.empty:
-            continue
-
-        row = subset.sort_values("pace").iloc[0]
-        achievements.setdefault(row["week"], []).append("run")
+    for d in [1, 5, 10, 21]:
+        subset = runs[runs["distance"] >= d * 1000]
+        if not subset.empty:
+            row = subset.sort_values("pace").iloc[0]
+            achievements.setdefault(row["week"], []).append("run")
 
 if df["max_watts"].notna().any():
     row = df.loc[df["max_watts"].idxmax()]
@@ -113,109 +96,87 @@ if df["max_hr"].notna().any():
     row = df.loc[df["max_hr"].idxmax()]
     achievements.setdefault(row["week"], []).append("hr")
 
-main, side = st.columns([3,1])
+
+# ---------------- LAYOUT ----------------
+
+main, side = st.columns([3, 1])
 
 with main:
 
+    # Weekly load
     st.subheader("Weekly Training Load")
-
     fig = weekly_chart(weekly, achievements)
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-    st.plotly_chart(
-        fig,
-        use_container_width=True,
-        config={"displayModeBar": False}
-    )
-
+    # Fitness model
     st.subheader("Fitness / Fatigue Model")
-
-    import plotly.graph_objects as go
-
     fig2 = go.Figure()
     fig2.add_trace(go.Scatter(x=weekly["week"], y=weekly["fitness"], name="Fitness"))
     fig2.add_trace(go.Scatter(x=weekly["week"], y=weekly["fatigue"], name="Fatigue"))
     fig2.add_trace(go.Scatter(x=weekly["week"], y=weekly["form"], name="Form", line=dict(dash="dot")))
-
     fig2.update_layout(height=300)
+    st.plotly_chart(fig2, use_container_width=True)
 
+    # ---------------- PB TABLE ----------------
     st.subheader("📊 PB Timeline (interpretable)")
-    
+
     timeline_df = compute_pb_timeline()
-    
+
     if not timeline_df.empty:
-    
+
         display_df = timeline_df[[
             "distance",
             "rank",
             "date",
             "pace_str",
-            "km_8w"
-        ]]
-    
-        display_df = display_df.rename(columns={
+            "km_8w",
+            "km_w1",
+            "km_4w"
+        ]].rename(columns={
             "distance": "Distance",
             "rank": "Rank",
             "date": "Date",
             "pace_str": "Pace",
-            "km_8w": "Km (8w)"
+            "km_8w": "Km (8w)",
+            "km_w1": "Km (week-1)",
+            "km_4w": "Km (4w)"
         })
-    
+
         st.dataframe(display_df, use_container_width=True, height=400)
-    
+
+        # ---------------- INSIGHT ----------------
+        st.subheader("🧠 Training Pattern (PB averages)")
+        summary = summarize_training_factors(timeline_df)
+        st.dataframe(summary, use_container_width=True)
+
     else:
         st.warning("No PB timeline data found")
 
-    st.subheader("🧠 Training Pattern (PB averages)")
-
-    summary = summarize_training_factors(timeline_df)
-    
-    st.dataframe(summary, use_container_width=True)
-    st.plotly_chart(fig2, use_container_width=True)
-    st.subheader("DEBUG TIMELINE")
-    
-    timeline_df = compute_pb_timeline()
-    
-    st.write("Rows:", len(timeline_df))
-    st.dataframe(timeline_df.head())
+    # ---------------- OLD PATTERN ----------------
     st.subheader("🏁 Load Before PBs")
 
     if not patterns.empty:
         fig3 = plot_performance_patterns(patterns)
-        st.plotly_chart(
-            fig3,
-            use_container_width=True,
-            config={"displayModeBar": False}
-        )
+        st.plotly_chart(fig3, use_container_width=True, config={"displayModeBar": False})
     else:
         st.info("No performance patterns available yet.")
 
-        st.subheader("📈 PB Timeline")
-        
-        timeline_df = compute_pb_timeline()
-        
-        if not timeline_df.empty:
-            fig = plot_pb_timeline(timeline_df)
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("No PB data available")
 
 with side:
 
     st.markdown("### 💡 Weekly Insight")
 
     sessions = df[df["week"] == latest["week"]].shape[0]
-    load_diff = (current_week - rolling)/rolling*100
+    load_diff = (latest["hours"] - latest["rolling"]) / latest["rolling"] * 100
     trend = "improving" if weekly["fitness"].iloc[-1] > weekly["fitness"].iloc[-2] else "stable"
 
-    st.write(f"Training load: **{current_week:.1f} h**")
+    st.write(f"Training load: **{latest['hours']:.1f} h**")
     st.write(f"vs average: **{load_diff:+.0f}%**")
     st.write(f"Sessions: **{sessions}**")
     st.write(f"Fitness trend: **{trend}**")
 
-    tsb = latest["form"]
-
     st.plotly_chart(
-        training_status_gauge(tsb),
+        training_status_gauge(latest["form"]),
         use_container_width=True,
         config={"displayModeBar": False}
     )
