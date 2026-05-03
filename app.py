@@ -167,9 +167,9 @@ with main:
 
     st.subheader("🧠 Training Pattern (PB averages)")
 
-summary = summarize_training_factors(timeline_df)
-
-st.dataframe(summary, use_container_width=True)
+    summary = summarize_training_factors(timeline_df)
+    
+    st.dataframe(summary, use_container_width=True)
     st.plotly_chart(fig2, use_container_width=True)
     st.subheader("DEBUG TIMELINE")
     
