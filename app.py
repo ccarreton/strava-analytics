@@ -125,22 +125,26 @@ with main:
     if not timeline_df.empty:
 
         display_df = timeline_df[[
-            "distance",
-            "rank",
-            "date",
-            "pace_str",
-            "km_8w",
-            "km_w1",
-            "km_4w"
-        ]].rename(columns={
-            "distance": "Distance",
-            "rank": "Rank",
-            "date": "Date",
-            "pace_str": "Pace",
-            "km_8w": "Km (8w)",
-            "km_w1": "Km (week-1)",
-            "km_4w": "Km (4w)"
-        })
+    "distance",
+    "rank",
+    "date",
+    "pace_str",
+    "km_8w",
+    "km_w1",
+    "km_4w",
+    "intensity",
+    "cross_load"
+]].rename(columns={
+    "distance": "Distance",
+    "rank": "Rank",
+    "date": "Date",
+    "pace_str": "Pace",
+    "km_8w": "Km (8w)",
+    "km_w1": "Km (week-1)",
+    "km_4w": "Km (4w)",
+    "intensity": "Intensity",
+    "cross_load": "Total Load"
+})
 
         st.dataframe(display_df, use_container_width=True, height=400)
 
