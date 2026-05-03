@@ -138,6 +138,34 @@ with main:
 
     fig2.update_layout(height=300)
 
+    st.subheader("📊 PB Timeline (interpretable)")
+    
+    timeline_df = compute_pb_timeline()
+    
+    if not timeline_df.empty:
+    
+        display_df = timeline_df[[
+            "distance",
+            "rank",
+            "date",
+            "pace_str",
+            "km_8w"
+        ]]
+    
+        display_df = display_df.rename(columns={
+            "distance": "Distance",
+            "rank": "Rank",
+            "date": "Date",
+            "pace_str": "Pace",
+            "km_8w": "Km (8w)"
+        })
+    
+        st.dataframe(display_df, use_container_width=True, height=400)
+    
+    else:
+        st.warning("No PB timeline data found")
+
+    
     st.plotly_chart(fig2, use_container_width=True)
     st.subheader("DEBUG TIMELINE")
     
