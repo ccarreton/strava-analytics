@@ -59,20 +59,37 @@ def compute_pb_timeline():
     records = []
 
     for _, row in pbs.iterrows():
-        km_8w = compute_rolling_km(df, row["date"])
+        date = row["date"]
+
+        # 🔹 8 semanas
+        start_8w = date - pd.Timedelta(days=56)
+        km_8w = df[(df["date"] >= start_8w) & (df["date"] <= date)]["distance"].sum() / 1000
+
+        # 🔹 semana -1 (taper real)
+        start_w1 = date - pd.Timedelta(days=7)
+        km_w1 = df[(df["date"] >= start_w1) & (df["date"] < date)]["distance"].sum() / 1000
+
+        # 🔹 fitness proxy (últimas 4 semanas)
+        start_4w = date - pd.Timedelta(days=28)
+        km_4w = df[(df["date"] >= start_4w) & (df["date"] <= date)]["distance"].sum() / 1000
 
         records.append({
-            "date": row["date"],
+            "date": date,
             "distance": row["distance_label"],
             "pace": row["pace"],
-            "km_8w": km_8w
+            "km_8w": km_8w,
+            "km_w1": km_w1,
+            "km_4w": km_4w
         })
 
     result = pd.DataFrame(records)
 
-    # 🧠 FORMATO FINAL (clave)
+    # 🧠 FORMATO
     result["pace_str"] = result["pace"].apply(format_pace)
+
     result["km_8w"] = result["km_8w"].round(0)
+    result["km_w1"] = result["km_w1"].round(0)
+    result["km_4w"] = result["km_4w"].round(0)
 
     result = result.sort_values(["distance", "pace"])
     result["rank"] = result.groupby("distance").cumcount() + 1
