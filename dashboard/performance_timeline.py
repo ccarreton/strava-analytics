@@ -33,7 +33,7 @@ def get_pb_activities(df):
         if subset.empty:
             continue
 
-        top = subset.sort_values("pace").head(5).copy()
+        top = subset.sort_values("pace").head(10).copy()
         top["distance_label"] = label
 
         results.append(top)
